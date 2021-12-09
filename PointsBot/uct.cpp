@@ -1,0 +1,301 @@
+#include "uct.h"
+//#include "field.h"
+#include <limits>
+#include <queue>
+#include <vector>
+#include <algorithm>
+#include <omp.h>
+
+#include <fstream>
+
+constexpr int UCTK = 1;
+constexpr int UCT_RADIUS = 3;
+
+using namespace std;
+
+short PlayRandomGame(Field& field, mt19937& gen, MoveList moves)
+{
+	size_t putted = 0;
+	Player result;
+	shuffle(moves.begin(), moves.end(), gen);
+	for (auto i = moves.begin(); i < moves.end(); i++)
+		if (field.CouldMove(*i))
+		{
+			field.MakeMove(*i);
+			putted++;
+		}
+
+	if (field.GetScore(kPlayerRed) > 0)
+		result = kPlayerRed;
+	else if (field.GetScore(kPlayerBlack) > 0)
+		result = kPlayerBlack;
+	else
+		result = -1;
+
+	for (size_t i = 0; i < putted; i++)
+		field.Undo();
+
+	return result;
+}
+
+bool CreateChildren(Field& field, const MoveList& moves, UctNode* n)
+{
+	UctNode** cur_child = &n->child;
+
+	for (Move move : moves)
+		if (field.CouldMove(move))
+		{
+			*cur_child = new UctNode(n);
+			(*cur_child)->move = move;
+			cur_child = &(*cur_child)->sibling;
+		}
+	return n->child;
+}
+
+UctNode* UctSelect(mt19937& gen, UctNode* n)
+{
+	double bestUct = 0, winRate, uct, uctValue;
+	UctNode* result = nullptr;
+	for (UctNode* next = n->child; next; next = next->sibling)
+	{
+		if (next->visits > 0)
+		{
+			winRate = static_cast<double>(next->wins) / (4 * next->visits);
+			uct = UCTK * sqrt(log(static_cast<double>(n->visits)) / (5 * next->visits));
+			uctValue = winRate + uct;
+		}
+		else
+		{
+			uctValue = gen();
+		}
+
+		if (uctValue > bestUct)
+		{
+			bestUct = uctValue;
+			result = next;
+		}
+	}
+
+	return result;
+}
+
+short PlaySimulation(Field& field, mt19937& gen, const MoveList& possible_moves, UctNode* cur)
+{
+	// TODO: Избавиться от дублирования кода и сравнить рекурсивную и не рекурсивную реализации
+	short result;
+	int stkLen = 0;
+	while (cur->visits)
+	{
+		if (!cur->child && !CreateChildren(field, possible_moves, cur))
+		{
+			// Детей нету и не будет - терминальное состояние
+			cur->visits = numeric_limits<unsigned int>::max();
+			if (field.GetScore(field.GetNextPlayer()) > 0)
+				cur->wins = numeric_limits<unsigned int>::max();
+			if (field.GetScore(kPlayerRed) > 0)
+				result = kPlayerRed;
+			else if (field.GetScore(kPlayerBlack) > 0)
+				result = kPlayerBlack;
+			else
+				result = -1;
+			break;
+		}
+		cur = UctSelect(gen, cur);
+		field.MakeMove(cur->move);
+	}
+	if (!cur->visits)
+	{
+		result = PlayRandomGame(field, gen, possible_moves);
+		cur->visits++;
+		if (result == field.GetNextPlayer())
+			cur->wins += 4;
+		else if (result == -1)
+			cur->wins++;
+	}
+
+	while (cur->parent)
+	{
+		cur = cur->parent;
+		field.Undo();
+		cur->visits++;
+		if (result == field.GetNextPlayer())
+			cur->wins += 4;
+		else if (result == -1)
+			cur->wins++;
+	}
+
+	return result;
+}
+
+template<typename _Cont>
+MoveList GeneratePossibleMoves(const Field& field, _Cont& moves)
+{
+	// TODO BUG: пустая далёкая зона в центре является выходом, что не есть правда
+	MoveList tempBorder;
+	unsigned char* r_field = new unsigned char[field.Length()];
+	fill_n(r_field, field.Length(), 0);
+	std::queue<Move> q;
+
+	moves.clear();
+	for (Move i = field.MinMove(); i <= field.MaxMove(); i++)
+		if (field.IsPoint(i))
+			q.push(i);
+
+	while (!q.empty())
+	{
+		if (field.CouldMove(q.front()))
+			moves.push_back(q.front());
+		if (r_field[q.front()] < UCT_RADIUS)
+		{
+			if (field.CouldMove(field.Up(q.front())) && r_field[field.Up(q.front())] == 0)
+			{
+				r_field[field.Up(q.front())] = r_field[q.front()] + 1;
+				q.push(field.Up(q.front()));
+			}
+			if (field.CouldMove(field.Down(q.front())) && r_field[field.Down(q.front())] == 0)
+			{
+				r_field[field.Down(q.front())] = r_field[q.front()] + 1;
+				q.push(field.Down(q.front()));
+			}
+			if (field.CouldMove(field.Left(q.front())) && r_field[field.Left(q.front())] == 0)
+			{
+				r_field[field.Left(q.front())] = r_field[q.front()] + 1;
+				q.push(field.Left(q.front()));
+			}
+			if (field.CouldMove(field.Right(q.front())) && r_field[field.Right(q.front())] == 0)
+			{
+				r_field[field.Right(q.front())] = r_field[q.front()] + 1;
+				q.push(field.Right(q.front()));
+			}
+		}
+		else
+		{
+			if (!field.IsBorder(field.Up(q.front())) && r_field[field.Up(q.front())] == 0)
+			{
+				tempBorder.push_back(field.Up(q.front()));
+			}
+			if (!field.IsBorder(field.Down(q.front())) && r_field[field.Down(q.front())] == 0)
+			{
+				tempBorder.push_back(field.Down(q.front()));
+			}
+			if (!field.IsBorder(field.Left(q.front())) && r_field[field.Left(q.front())] == 0)
+			{
+				tempBorder.push_back(field.Left(q.front()));
+			}
+			if (!field.IsBorder(field.Right(q.front())) && r_field[field.Right(q.front())] == 0)
+			{
+				tempBorder.push_back(field.Right(q.front()));
+			}
+		}
+		q.pop();
+	}
+	if (moves.empty())
+		moves.push_back(field.Length() / 2);
+	delete[] r_field;
+	return tempBorder;
+}
+
+Move Uct(Field& field, mt19937& gen, int simulations)
+{
+	// Список всех возможных ходов для UCT.
+	MoveList moves;
+	double best_estimate = 0;
+	Move result = -1;
+
+	MoveList tempBorder = GeneratePossibleMoves(field, moves);
+	for (Move move : tempBorder)
+		field.SetBorder(move);
+
+	//omp_set_num_threads(min((size_t)omp_get_max_threads(), moves.size()));
+	omp_set_num_threads(1);
+
+
+	//unsigned short* probs = new unsigned short[cur_field->length()];
+	//fill_n(probs, cur_field->length(), 0);
+
+#pragma omp parallel
+	{
+		UctNode n;
+		Field local_field(field);
+		unsigned int seed;
+#pragma omp critical
+		{
+			seed = gen();
+		}
+		mt19937 local_gen(seed);
+
+		UctNode** cur_child = &n.child;
+		for (auto i = moves.begin() + omp_get_thread_num(); i < moves.end(); i += omp_get_num_threads())
+		{
+			*cur_child = new UctNode(&n);
+			(*cur_child)->move = *i;
+			cur_child = &(*cur_child)->sibling;
+		}
+
+#pragma omp for
+		for (int i = 0; i < simulations; i++)
+			PlaySimulation(local_field, local_gen, moves, &n);
+
+#pragma omp critical
+		{
+			UctNode* next = n.child;
+			while (next != nullptr)
+			{
+				double cur_estimate = static_cast<double>(next->wins) / next->visits;
+				//printf("%s %u (%d %d) %u %u\n", next->wins / (double)next->visits / 4 > 0.75 ? "@" : "!", next->move, cur_field->ToX(next->move), cur_field->ToY(next->move), next->wins, next->visits);
+				printf("! %u %u %u\n", next->move, next->wins, next->visits);
+				//probs[next->move] = next->wins * 100 / 4 / next->visits;
+				if (cur_estimate > best_estimate)
+				{
+					best_estimate = cur_estimate;
+					result = next->move;
+				}
+				next = next->sibling;
+			}
+
+			//next = n.child;
+			//while (true)
+			//{
+			//	best_estimate = -1;
+			//	result = -1;
+			//	uct_node* best = nullptr;
+			//	while (next != nullptr)
+			//	{
+			//		double cur_estimate = static_cast<double>(next->wins) / next->visits;
+			//		if (cur_estimate > best_estimate)
+			//		{
+			//			best_estimate = cur_estimate;
+			//			result = next->move;
+			//			best = next;
+			//		}
+			//		next = next->sibling;
+			//	}
+			//	if (result == -1)
+			//		break;
+			//	cur_field->MakeMove(result);
+			//	if (!best || !best->child)
+			//		break;
+			//	next = best->child;
+			//}
+		}
+	}
+
+	//cout << "   :";
+	//for (int i = 0; i < cur_field->width; i++)
+	//	cout << std::setw(3) << i;
+	//cout << "\n";
+	//for (int i = cur_field->height - 1; i >= 0; i--)
+	//{
+	//	cout << std::setw(3) << i << ":";
+	//	for (int j = 0; j < cur_field->width; j++)
+	//	{
+	//		cout << std::setw(3) << (int)probs[cur_field->ToMove(j, i)];
+	//	}
+	//	cout << "\n";
+	//}
+
+	for (Move move : tempBorder)
+		field.DelBorder(move);
+
+	return result;
+}
