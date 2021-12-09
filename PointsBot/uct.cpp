@@ -206,8 +206,8 @@ Move Uct(Field& field, mt19937& gen, int simulations)
 	for (Move move : tempBorder)
 		field.SetBorder(move);
 
-	//omp_set_num_threads(min((size_t)omp_get_max_threads(), moves.size()));
-	omp_set_num_threads(1);
+	omp_set_num_threads(min((size_t)omp_get_max_threads(), moves.size()));
+	//omp_set_num_threads(1);
 
 
 	//unsigned short* probs = new unsigned short[cur_field->length()];
@@ -238,8 +238,7 @@ Move Uct(Field& field, mt19937& gen, int simulations)
 
 #pragma omp critical
 		{
-			UctNode* next = n.child;
-			while (next != nullptr)
+			for (UctNode* next = n.child; next; next = next->sibling)
 			{
 				double cur_estimate = static_cast<double>(next->wins) / next->visits;
 				//printf("%s %u (%d %d) %u %u\n", next->wins / (double)next->visits / 4 > 0.75 ? "@" : "!", next->move, cur_field->ToX(next->move), cur_field->ToY(next->move), next->wins, next->visits);
@@ -250,33 +249,7 @@ Move Uct(Field& field, mt19937& gen, int simulations)
 					best_estimate = cur_estimate;
 					result = next->move;
 				}
-				next = next->sibling;
 			}
-
-			//next = n.child;
-			//while (true)
-			//{
-			//	best_estimate = -1;
-			//	result = -1;
-			//	uct_node* best = nullptr;
-			//	while (next != nullptr)
-			//	{
-			//		double cur_estimate = static_cast<double>(next->wins) / next->visits;
-			//		if (cur_estimate > best_estimate)
-			//		{
-			//			best_estimate = cur_estimate;
-			//			result = next->move;
-			//			best = next;
-			//		}
-			//		next = next->sibling;
-			//	}
-			//	if (result == -1)
-			//		break;
-			//	cur_field->MakeMove(result);
-			//	if (!best || !best->child)
-			//		break;
-			//	next = best->child;
-			//}
 		}
 	}
 
