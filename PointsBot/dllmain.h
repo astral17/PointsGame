@@ -1,5 +1,7 @@
 #pragma once
 
+#include "field.h"
+
 #define DLLEXPORT extern "C" __declspec(dllexport)
 
-//DLLEXPORT void func(int x);
+DLLEXPORT Field* Init(int width, int height, int seed);

@@ -16,7 +16,7 @@ using namespace std;
 short PlayRandomGame(Field& field, mt19937& gen, MoveList moves)
 {
 	size_t putted = 0;
-	Player result;
+	short result;
 	shuffle(moves.begin(), moves.end(), gen);
 	for (auto i = moves.begin(); i < moves.end(); i++)
 		if (field.CouldMove(*i))
@@ -25,12 +25,13 @@ short PlayRandomGame(Field& field, mt19937& gen, MoveList moves)
 			putted++;
 		}
 
-	if (field.GetScore(kPlayerRed) > 0)
-		result = kPlayerRed;
-	else if (field.GetScore(kPlayerBlack) > 0)
-		result = kPlayerBlack;
-	else
-		result = -1;
+	//if (field.GetScore(kPlayerRed) > 0)
+	//	result = kPlayerRed;
+	//else if (field.GetScore(kPlayerBlack) > 0)
+	//	result = kPlayerBlack;
+	//else
+	//	result = -1;
+	result = field.GetScore(kPlayerRed);
 
 	for (size_t i = 0; i < putted; i++)
 		field.Undo();
@@ -54,19 +55,19 @@ bool CreateChildren(Field& field, const MoveList& moves, UctNode* n)
 
 UctNode* UctSelect(mt19937& gen, UctNode* n)
 {
-	double bestUct = 0, winRate, uct, uctValue;
+	double bestUct = numeric_limits<double>::lowest(), winRate, uct, uctValue;
 	UctNode* result = nullptr;
 	for (UctNode* next = n->child; next; next = next->sibling)
 	{
 		if (next->visits > 0)
 		{
-			winRate = static_cast<double>(next->wins) / (4 * next->visits);
-			uct = UCTK * sqrt(log(static_cast<double>(n->visits)) / (5 * next->visits));
+			winRate = static_cast<double>(next->wins) / next->visits;
+			uct = UCTK * sqrt(log(static_cast<double>(n->visits)) / next->visits);
 			uctValue = winRate + uct;
 		}
 		else
 		{
-			uctValue = gen();
+			uctValue = (gen() | (1 << 31));
 		}
 
 		if (uctValue > bestUct)
@@ -89,15 +90,19 @@ short PlaySimulation(Field& field, mt19937& gen, const MoveList& possible_moves,
 		if (!cur->child && !CreateChildren(field, possible_moves, cur))
 		{
 			// Детей нету и не будет - терминальное состояние
-			cur->visits = numeric_limits<unsigned int>::max();
+			cur->visits = numeric_limits<int>::max();
 			if (field.GetScore(field.GetNextPlayer()) > 0)
-				cur->wins = numeric_limits<unsigned int>::max();
-			if (field.GetScore(kPlayerRed) > 0)
-				result = kPlayerRed;
-			else if (field.GetScore(kPlayerBlack) > 0)
-				result = kPlayerBlack;
-			else
-				result = -1;
+				cur->wins = numeric_limits<int>::max();
+			else if (field.GetScore(field.GetNextPlayer()) < 0)
+				cur->wins = numeric_limits<int>::min();
+
+			result = field.GetScore(kPlayerRed);
+			//if (field.GetScore(kPlayerRed) > 0)
+			//	result = kPlayerRed;
+			//else if (field.GetScore(kPlayerBlack) > 0)
+			//	result = kPlayerBlack;
+			//else
+			//	result = -1;
 			break;
 		}
 		cur = UctSelect(gen, cur);
@@ -107,10 +112,14 @@ short PlaySimulation(Field& field, mt19937& gen, const MoveList& possible_moves,
 	{
 		result = PlayRandomGame(field, gen, possible_moves);
 		cur->visits++;
-		if (result == field.GetNextPlayer())
-			cur->wins += 4;
-		else if (result == -1)
-			cur->wins++;
+		if (field.GetNextPlayer() == kPlayerRed)
+			cur->wins += result;
+		else
+			cur->wins -= result;
+		//if (result == field.GetNextPlayer())
+		//	cur->wins += 4;
+		//else if (result == -1)
+		//	cur->wins++;
 	}
 
 	while (cur->parent)
@@ -118,10 +127,14 @@ short PlaySimulation(Field& field, mt19937& gen, const MoveList& possible_moves,
 		cur = cur->parent;
 		field.Undo();
 		cur->visits++;
-		if (result == field.GetNextPlayer())
-			cur->wins += 4;
-		else if (result == -1)
-			cur->wins++;
+		if (field.GetNextPlayer() == kPlayerRed)
+			cur->wins += result;
+		else
+			cur->wins -= result;
+		//if (result == field.GetNextPlayer())
+		//	cur->wins += 4;
+		//else if (result == -1)
+		//	cur->wins++;
 	}
 
 	return result;
@@ -190,7 +203,7 @@ MoveList GeneratePossibleMoves(const Field& field, _Cont& moves)
 		q.pop();
 	}
 	if (moves.empty())
-		moves.push_back(field.Length() / 2);
+		moves.push_back(field.ToMove(field.width / 2, field.height / 2));
 	delete[] r_field;
 	return tempBorder;
 }
@@ -199,7 +212,7 @@ Move Uct(Field& field, mt19937& gen, int simulations)
 {
 	// Список всех возможных ходов для UCT.
 	MoveList moves;
-	double best_estimate = 0;
+	double best_estimate = numeric_limits<double>::lowest();
 	Move result = -1;
 
 	MoveList tempBorder = GeneratePossibleMoves(field, moves);
@@ -242,7 +255,8 @@ Move Uct(Field& field, mt19937& gen, int simulations)
 			{
 				double cur_estimate = static_cast<double>(next->wins) / next->visits;
 				//printf("%s %u (%d %d) %u %u\n", next->wins / (double)next->visits / 4 > 0.75 ? "@" : "!", next->move, cur_field->ToX(next->move), cur_field->ToY(next->move), next->wins, next->visits);
-				printf("! %u %u %u\n", next->move, next->wins, next->visits);
+				//printf("! %u %u %u\n", next->move, next->wins, next->visits);
+				cout << "! " << next->move << " " << next->wins << " " << next->visits << "\n";
 				//probs[next->move] = next->wins * 100 / 4 / next->visits;
 				if (cur_estimate > best_estimate)
 				{

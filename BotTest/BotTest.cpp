@@ -16,7 +16,7 @@ using namespace std;
 short SetField[] =
 {
  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0,
+ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 3, 2, 0, 0, 0,
  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0,
@@ -209,11 +209,12 @@ int main()
 	//field.MakeMove(field.ToMove(11, 10));
 	mt19937 mt;
 	//for (int i = 0; i < 100; i++)
-	//cout << Uct(field, mt, 3*450000) << "\n";
+	//cout << Uct(field, mt, 100000) << "\n";
+	//return 0;
 	//cout << Uct(field, mt, 450000) << "\n";
 	//cout << AlphaBeta(field, 3);
 	//cout << Uct(field, mt, 10000) << "\n";
-	//Move move = uct(&field, &mt, 1000000);
+	//Move move = Uct(field, mt, 1000000);
 	//cout << move << "\n";
 	//field.MakeMove(move);
 	//field.DebugPrint();
@@ -229,46 +230,48 @@ int main()
 	//	cout << "\n";
 	//}
 	//int score = 0;
-	//field.DebugPrint(cout, to_string(field.score), true, true);
+	field.DebugPrint(cout, to_string(field.score), true, true);
 	//*
 	while (!field.GetAllMoves().empty())
 	{
 		if (field.player == 1)
 		{
-			field.MakeMove(Uct(field, mt, 100000));
+			field.MakeMove(Uct(field, mt, 1000000));
+			//field.MakeMove(AlphaBeta(field, mt, 12));
 		}
 		else
 		{
-			field.MakeMove(AlphaBeta(field, mt, 4));
-		}
-		//Uct(&field, &mt, 2000000);
-		//field.DebugPrint(cout, to_string(field.score), true, true);
-		//	int x, y;
-		//	while (true)
-		//	{
-		//		cout << "Your move: ";
-		//		cin >> x >> y;
-		//		if (x != -1)
-		//			break;
-		//		x = y;
-		//		cin >> y;
-		//		cout << field.ToMove(x, y) << "\n";
-		//	}
-		//	field.MakeMove(field.ToMove(x, y));
+			//field.MakeMove(Uct(field, mt, 100000));
+			//field.MakeMove(AlphaBeta(field, mt, 4));
 		//}
+		//Uct(&field, &mt, 2000000);
+		field.DebugPrint(cout, to_string(field.score), true, true);
+			int x, y;
+			while (true)
+			{
+				cout << "Your move: ";
+				cin >> x >> y;
+				if (x != -1)
+					break;
+				x = y;
+				cin >> y;
+				cout << field.ToMove(x, y) << "\n";
+			}
+			field.MakeMove(field.ToMove(x, y));
+		}
 		//else
 		//{
 		//	field.MakeMove(uct(&field, &mt, 2000000));
 		//}
 		//if (field.score != score)
 		//{
-			field.DebugPrint(cout, to_string(field.score), true, true);
+			//field.DebugPrint(cout, to_string(field.score), true, true);
 		//	score = field.score;
 		//}
 	}//*/
 	//cout << (int)field.player << " " << field.GetScore(1) << "\n";
 	//field.DebugPrint(cout, to_string(field.GetScore(field.player)), false);
-	field.DebugPrint(cout, to_string(field.score), true, true);
+	//field.DebugPrint(cout, to_string(field.score), true, true);
 	//cout << "Used time: " << (clock() - stime) / (double)CLOCKS_PER_SEC << "\n";
 	LARGE_INTEGER end;
 	QueryPerformanceCounter(&end);

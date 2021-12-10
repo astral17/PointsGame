@@ -1,5 +1,6 @@
 #include "alpha_beta.h"
 #include <omp.h>
+#include <algorithm>
 
 // TODO: Удалить дублирование кода
 template<typename _Cont>
@@ -8,7 +9,7 @@ MoveList GeneratePossibleMoves2(const Field& field, _Cont& moves)
 	// TODO BUG: пустая далёкая зона в центре является выходом, что не есть правда
 	MoveList tempBorder;
 	unsigned char* r_field = new unsigned char[field.Length()];
-	fill_n(r_field, field.Length(), 0);
+	std::fill_n(r_field, field.Length(), 0);
 	std::queue<Move> q;
 
 	moves.clear();
@@ -20,7 +21,7 @@ MoveList GeneratePossibleMoves2(const Field& field, _Cont& moves)
 	{
 		if (field.CouldMove(q.front()))
 			moves.push_back(q.front());
-		if (r_field[q.front()] < UCT_RADIUS)
+		if (r_field[q.front()] < 3)
 		{
 			if (field.CouldMove(field.Up(q.front())) && r_field[field.Up(q.front())] == 0)
 			{
@@ -65,7 +66,7 @@ MoveList GeneratePossibleMoves2(const Field& field, _Cont& moves)
 		q.pop();
 	}
 	if (moves.empty())
-		moves.push_back(field.Length() / 2);
+		moves.push_back(field.ToMove(field.width / 2, field.height / 2));
 	delete[] r_field;
 	return tempBorder;
 }

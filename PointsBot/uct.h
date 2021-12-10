@@ -12,8 +12,8 @@ using namespace std;
 
 struct UctNode
 {
-	uint32_t wins;
-	uint32_t visits;
+	int32_t wins;
+	int32_t visits;
 	Move move;
 	UctNode* parent;
 	UctNode* child;
