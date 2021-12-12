@@ -198,9 +198,9 @@ int main()
 	Field field(20, 20);
 	//Field field(11, 10, 1);
 	//Field field(20, 20, 1);
-	for (int i = 0; i < field.height; i++)
-		for (int j = 0; j < field.width; j++)
-			field.field[field.ToMove(j, field.height - 1 - i)] = SetField[i * field.width + j];
+	//for (int i = 0; i < field.height; i++)
+	//	for (int j = 0; j < field.width; j++)
+	//		field.field[field.ToMove(j, field.height - 1 - i)] = SetField[i * field.width + j];
 	//field.MakeMove(field.ToMove(4, 10));
 	//field.MakeMove(field.ToMove(8, 8));
 	//field.score = 24;
@@ -234,8 +234,8 @@ int main()
 	//cout << Uct(field, mt, 450000) << "\n";
 	//cout << AlphaBeta(field, 3);
 	//cout << Uct(field, mt, 10000) << "\n";
-	//Move move = Uct(field, mt, 1000000);
-	Move move = AlphaBeta(field, mt, 6);
+	Move move = Uct(field, mt, 1000000);
+	//Move move = AlphaBeta(field, mt, 6);
 	//field.MakeMove(394);
 	//Move move = BestNodeSearch(field, mt, 6);
 	cout << move << "\n";

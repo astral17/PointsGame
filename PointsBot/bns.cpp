@@ -22,7 +22,7 @@ Move BestNodeSearch(Field& field, std::mt19937& gen, int depth)
 		int test = NextGuess(alpha, beta, subtreeCount);
 		betterCount = 0;
 		int maxValue = -INT_MAX;
-		std::cout << FMT(alpha) << ", " << FMT(beta) << ", " << FMT(subtreeCount) << ", " << FMT(test) << ":\t";
+		//std::cout << FMT(alpha) << ", " << FMT(beta) << ", " << FMT(subtreeCount) << ", " << FMT(test) << ":\t";
 		// TODO: Parallel
 		for (Move move : moves)
 		{
@@ -42,7 +42,7 @@ Move BestNodeSearch(Field& field, std::mt19937& gen, int depth)
 			}
 			field.Undo();
 		}
-		std::cout << FMT(betterCount) << ", " << FMT(maxValue) << "\n";
+		//std::cout << FMT(betterCount) << ", " << FMT(maxValue) << "\n";
 		if (betterCount == 0)
 		{
 			//beta = test - 1;
@@ -57,7 +57,7 @@ Move BestNodeSearch(Field& field, std::mt19937& gen, int depth)
 	} while (beta - alpha > 1 && betterCount != 1);
 	for (Move move : tempBorder)
 		field.DelBorder(move);
-	std::cout << "\n";
-	std::cout << "BestNodeSearch " << alpha << " " << beta << "\n";
+	//std::cout << "\n";
+	//std::cout << "BestNodeSearch " << alpha << " " << beta << "\n";
 	return bestMove;
 }

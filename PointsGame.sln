@@ -7,7 +7,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PointsBot", "PointsBot\Poin
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BotTest", "BotTest\BotTest.vcxproj", "{9E9C6301-89EF-4B83-A92B-0F360BC6849A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PointsGUI", "PointsGUI\PointsGUI.csproj", "{AE5437D3-7E2F-4DC4-87A0-F051F4673421}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PointsGUI", "PointsGUI\PointsGUI.csproj", "{AE5437D3-7E2F-4DC4-87A0-F051F4673421}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DllBattles", "DllBattles\DllBattles.vcxproj", "{529C162E-1673-4CF7-B536-3DF7704CD8A2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,6 +53,16 @@ Global
 		{AE5437D3-7E2F-4DC4-87A0-F051F4673421}.Release|x64.Build.0 = Release|Any CPU
 		{AE5437D3-7E2F-4DC4-87A0-F051F4673421}.Release|x86.ActiveCfg = Release|Any CPU
 		{AE5437D3-7E2F-4DC4-87A0-F051F4673421}.Release|x86.Build.0 = Release|Any CPU
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Debug|x64.ActiveCfg = Debug|x64
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Debug|x64.Build.0 = Debug|x64
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Debug|x86.ActiveCfg = Debug|Win32
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Debug|x86.Build.0 = Debug|Win32
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Release|Any CPU.ActiveCfg = Release|Win32
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Release|x64.ActiveCfg = Release|x64
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Release|x64.Build.0 = Release|x64
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Release|x86.ActiveCfg = Release|Win32
+		{529C162E-1673-4CF7-B536-3DF7704CD8A2}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

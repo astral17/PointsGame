@@ -20,7 +20,7 @@ MoveList GeneratePossibleMoves2(const Field& field, MoveList& moves)
 	{
 		if (field.CouldMove(q.front()))
 			moves.push_back(q.front());
-		if (r_field[q.front()] < 3)
+		if (r_field[q.front()] < 2)
 		{
 			if (field.CouldMove(field.Up(q.front())) && r_field[field.Up(q.front())] == 0)
 			{
@@ -99,8 +99,8 @@ Move AlphaBeta(Field& field, std::mt19937 &gen, int depth)
 	MoveList tempBorder = GeneratePossibleMoves2(field, moves);
 	shuffle(moves.begin(), moves.end(), gen);
 	AlphaBetaResult result(-INT_MAX);
-	//omp_set_num_threads(std::min((size_t)omp_get_max_threads(), moves.size()));
-	omp_set_num_threads(1);
+	omp_set_num_threads(std::min((size_t)omp_get_max_threads(), moves.size()));
+	//omp_set_num_threads(1);
 	int alpha = -INT_MAX, beta = INT_MAX;
 #pragma omp parallel
 	{

@@ -9,7 +9,9 @@
 #include <fstream>
 
 constexpr int UCTK = 1;
-constexpr int UCT_RADIUS = 3;
+constexpr int UCT_RADIUS = 2;
+
+#define ORDER_BY_SCORE 1
 
 using namespace std;
 
@@ -24,14 +26,16 @@ short PlayRandomGame(Field& field, mt19937& gen, MoveList moves)
 			field.MakeMove(*i);
 			putted++;
 		}
-
-	//if (field.GetScore(kPlayerRed) > 0)
-	//	result = kPlayerRed;
-	//else if (field.GetScore(kPlayerBlack) > 0)
-	//	result = kPlayerBlack;
-	//else
-	//	result = -1;
+#ifdef ORDER_BY_SCORE
 	result = field.GetScore(kPlayerRed);
+#else
+	if (field.GetScore(kPlayerRed) > 0)
+		result = kPlayerRed;
+	else if (field.GetScore(kPlayerBlack) > 0)
+		result = kPlayerBlack;
+	else
+		result = -1;
+#endif
 
 	for (size_t i = 0; i < putted; i++)
 		field.Undo();
@@ -61,13 +65,18 @@ UctNode* UctSelect(mt19937& gen, UctNode* n)
 	{
 		if (next->visits > 0)
 		{
+#ifdef ORDER_BY_SCORE
 			winRate = static_cast<double>(next->wins) / next->visits;
 			uct = UCTK * sqrt(log(static_cast<double>(n->visits)) / next->visits);
+#else
+			winRate = static_cast<double>(next->wins) / (4 * next->visits);
+			uct = UCTK * sqrt(log(static_cast<double>(n->visits)) / (5 * next->visits));
+#endif
 			uctValue = winRate + uct;
 		}
 		else
 		{
-			uctValue = (gen() | (1 << 31));
+			uctValue = (gen() | (1u << 31));
 		}
 
 		if (uctValue > bestUct)
@@ -95,14 +104,16 @@ short PlaySimulation(Field& field, mt19937& gen, const MoveList& possible_moves,
 				cur->wins = numeric_limits<int>::max();
 			else if (field.GetScore(field.GetNextPlayer()) < 0)
 				cur->wins = numeric_limits<int>::min();
-
+#ifdef ORDER_BY_SCORE
 			result = field.GetScore(kPlayerRed);
-			//if (field.GetScore(kPlayerRed) > 0)
-			//	result = kPlayerRed;
-			//else if (field.GetScore(kPlayerBlack) > 0)
-			//	result = kPlayerBlack;
-			//else
-			//	result = -1;
+#else
+			if (field.GetScore(kPlayerRed) > 0)
+				result = kPlayerRed;
+			else if (field.GetScore(kPlayerBlack) > 0)
+				result = kPlayerBlack;
+			else
+				result = -1;
+#endif
 			break;
 		}
 		cur = UctSelect(gen, cur);
@@ -112,14 +123,17 @@ short PlaySimulation(Field& field, mt19937& gen, const MoveList& possible_moves,
 	{
 		result = PlayRandomGame(field, gen, possible_moves);
 		cur->visits++;
+#ifdef ORDER_BY_SCORE
 		if (field.GetNextPlayer() == kPlayerRed)
 			cur->wins += result;
 		else
 			cur->wins -= result;
-		//if (result == field.GetNextPlayer())
-		//	cur->wins += 4;
-		//else if (result == -1)
-		//	cur->wins++;
+#else
+		if (result == field.GetNextPlayer())
+			cur->wins += 4;
+		else if (result == -1)
+			cur->wins++;
+#endif
 	}
 
 	while (cur->parent)
@@ -127,14 +141,17 @@ short PlaySimulation(Field& field, mt19937& gen, const MoveList& possible_moves,
 		cur = cur->parent;
 		field.Undo();
 		cur->visits++;
+#ifdef ORDER_BY_SCORE
 		if (field.GetNextPlayer() == kPlayerRed)
 			cur->wins += result;
 		else
 			cur->wins -= result;
-		//if (result == field.GetNextPlayer())
-		//	cur->wins += 4;
-		//else if (result == -1)
-		//	cur->wins++;
+#else
+		if (result == field.GetNextPlayer())
+			cur->wins += 4;
+		else if (result == -1)
+			cur->wins++;
+#endif
 	}
 
 	return result;
@@ -256,7 +273,7 @@ Move Uct(Field& field, mt19937& gen, int simulations)
 				double cur_estimate = static_cast<double>(next->wins) / next->visits;
 				//printf("%s %u (%d %d) %u %u\n", next->wins / (double)next->visits / 4 > 0.75 ? "@" : "!", next->move, cur_field->ToX(next->move), cur_field->ToY(next->move), next->wins, next->visits);
 				//printf("! %u %u %u\n", next->move, next->wins, next->visits);
-				cout << "! " << next->move << " " << next->wins << " " << next->visits << "\n";
+				//cout << "! " << next->move << " " << next->wins << " " << next->visits << "\n";
 				//probs[next->move] = next->wins * 100 / 4 / next->visits;
 				if (cur_estimate > best_estimate)
 				{
