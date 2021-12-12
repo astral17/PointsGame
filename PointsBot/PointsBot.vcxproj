@@ -161,12 +161,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="alpha_beta.cpp" />
+    <ClCompile Include="bns.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="field.cpp" />
     <ClCompile Include="uct.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="alpha_beta.h" />
+    <ClInclude Include="bns.h" />
     <ClInclude Include="dllmain.h" />
     <ClInclude Include="fast_queue.h" />
     <ClInclude Include="field.h" />

@@ -3,8 +3,7 @@
 #include <algorithm>
 
 // TODO: Удалить дублирование кода
-template<typename _Cont>
-MoveList GeneratePossibleMoves2(const Field& field, _Cont& moves)
+MoveList GeneratePossibleMoves2(const Field& field, MoveList& moves)
 {
 	// TODO BUG: пустая далёкая зона в центре является выходом, что не есть правда
 	MoveList tempBorder;
@@ -71,7 +70,7 @@ MoveList GeneratePossibleMoves2(const Field& field, _Cont& moves)
 	return tempBorder;
 }
 
-AlphaBetaResult AlphaBeta(Field& field, const MoveList& moves, int depth, int alpha = -INT_MAX, int beta = INT_MAX)
+AlphaBetaResult AlphaBeta(Field& field, const MoveList& moves, int depth, int alpha, int beta)
 {
 	if (depth == 0)
 		return AlphaBetaResult(field.GetScore(field.GetPlayer()));
@@ -100,7 +99,8 @@ Move AlphaBeta(Field& field, std::mt19937 &gen, int depth)
 	MoveList tempBorder = GeneratePossibleMoves2(field, moves);
 	shuffle(moves.begin(), moves.end(), gen);
 	AlphaBetaResult result(-INT_MAX);
-	omp_set_num_threads(std::min((size_t)omp_get_max_threads(), moves.size()));
+	//omp_set_num_threads(std::min((size_t)omp_get_max_threads(), moves.size()));
+	omp_set_num_threads(1);
 	int alpha = -INT_MAX, beta = INT_MAX;
 #pragma omp parallel
 	{

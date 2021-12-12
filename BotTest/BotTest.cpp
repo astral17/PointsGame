@@ -7,14 +7,32 @@
 #include <iomanip>
 #include "field.cpp"
 #include "uct.cpp"
-#include "alpha_beta.h"
 #include "alpha_beta.cpp"
+#include "bns.cpp"
 #include <Windows.h>
 
 using namespace std;
 
 short SetField[] =
 {
+//0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+//0, 0, 0, 0, 0, 3, 0, 0, 0, 0,
+//0, 0, 0, 3, 3, 0, 3, 0, 3, 0,
+//0, 0, 0, 2, 2, 2, 2, 2, 0, 0,
+//0, 0, 0, 2, 3, 0, 3, 0, 0, 0,
+//0, 0, 0, 2, 3, 0, 0, 0, 0, 0,
+//0, 3, 0, 0, 0, 3, 3, 2, 0, 0,
+//0, 0, 0, 2, 3, 0, 3, 2, 0, 0,
+//0, 0, 3, 2, 2, 0, 0, 2, 0, 0,
+//0, 0, 0, 3, 3, 2, 2, 0, 0, 0,
+//0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+
+//0, 0, 0, 0, 0,
+//0, 0, 0, 0, 0,
+//0, 2, 3, 2, 0,
+//0, 0, 2, 0, 0,
+//0, 0, 0, 0, 0,
+
  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -176,11 +194,13 @@ int main()
 	//field.MakeMove(field.ToMove(2, 1));
 	//field.MakeMove(field.ToMove(2, 2));
 	//field.MakeMove(field.ToMove(0, 1));
+	//Field field(5, 5);
 	Field field(20, 20);
+	//Field field(11, 10, 1);
 	//Field field(20, 20, 1);
-	//for (int i = 0; i < field.height; i++)
-	//	for (int j = 0; j < field.width; j++)
-	//		field.field[field.ToMove(j, field.height - 1 - i)] = SetField[i * field.width + j];
+	for (int i = 0; i < field.height; i++)
+		for (int j = 0; j < field.width; j++)
+			field.field[field.ToMove(j, field.height - 1 - i)] = SetField[i * field.width + j];
 	//field.MakeMove(field.ToMove(4, 10));
 	//field.MakeMove(field.ToMove(8, 8));
 	//field.score = 24;
@@ -199,7 +219,7 @@ int main()
 	//cout << (int)field.field[move] << "\n";
 	//cout << field.ToX(move) << " " << field.ToY(move) << "\n";
 	
-	field.MakeMove(field.ToMove(10, 10));
+	//field.MakeMove(field.ToMove(10, 10));
 	//field.MakeMove(field.ToMove(10, 9));
 	//field.MakeMove(field.ToMove(11, 9));
 	//field.MakeMove(field.ToMove(11, 18));
@@ -215,8 +235,20 @@ int main()
 	//cout << AlphaBeta(field, 3);
 	//cout << Uct(field, mt, 10000) << "\n";
 	//Move move = Uct(field, mt, 1000000);
-	//cout << move << "\n";
-	//field.MakeMove(move);
+	Move move = AlphaBeta(field, mt, 6);
+	//field.MakeMove(394);
+	//Move move = BestNodeSearch(field, mt, 6);
+	cout << move << "\n";
+	field.MakeMove(move);
+	field.DebugPrint(cout, to_string(field.score), true, true);
+	//for (int i = 0; i < 6; i++)
+	//{
+	//	Move move = AlphaBeta(field, mt, 6 - i / 2);
+	//	cout << move << "\n";
+	//	field.MakeMove(move);
+	//	field.DebugPrint(cout, to_string(field.score), true, true);
+	//}
+	//cout << field.ToMove(3, 4) << "\n";
 	//field.DebugPrint();
 	//cout << "  : ";
 	//for (int i = 0; i < field.width; i++)
@@ -230,8 +262,8 @@ int main()
 	//	cout << "\n";
 	//}
 	//int score = 0;
-	field.DebugPrint(cout, to_string(field.score), true, true);
-	//*
+	//field.DebugPrint(cout, to_string(field.score), true, true);
+	/*
 	while (!field.GetAllMoves().empty())
 	{
 		if (field.player == 1)
