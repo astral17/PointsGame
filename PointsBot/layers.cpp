@@ -1,16 +1,40 @@
 #include "layers.h"
 
 #include <algorithm>
+#include <fstream>
 #include <cassert>
 #include <stdexcept>
+#include <numeric>
 #include <initializer_list>
 
 using namespace dnnl;
 
+memory::dims GetStridesForDims(const memory::dims& dims)
+{
+    memory::dims result(dims.size());
+    for (memory::dim i = result.size() - 1, prod = 1; i >= 0; i--)
+    {
+        result[i] = prod;
+        prod *= dims[i];
+    }
+    return result;
+}
+
+size_t GetMemoryCount(const dnnl::memory& mem)
+{
+    auto dims = mem.get_desc().dims();
+    return std::accumulate(dims.begin(), dims.end(), 1, std::multiplies<int>());
+}
+
+size_t GetMemoryByteSize(const dnnl::memory& mem)
+{
+    return mem.get_desc().get_size();
+}
+
 void operator>>(const dnnl::memory& mem, void* handle)
 {
     dnnl::engine eng = mem.get_engine();
-    size_t size = mem.get_desc().get_size();
+    size_t size = GetMemoryByteSize(mem);
 
     if (!handle)
         throw std::runtime_error("handle is nullptr.");
@@ -39,7 +63,7 @@ void operator>>(const dnnl::memory& mem, void* handle)
 void operator<<(const dnnl::memory& mem, void* handle)
 {
     dnnl::engine eng = mem.get_engine();
-    size_t size = mem.get_desc().get_size();
+    size_t size = GetMemoryByteSize(mem);
 
     if (!handle)
         throw std::runtime_error("handle is nullptr.");
@@ -89,22 +113,50 @@ void NNetwork::Build(float learn_rate)
     std::reverse(bwd.begin(), bwd.end());
 }
 
+void NNetwork::RandomWeights(std::mt19937& mt, float min, float max)
+{
+    std::uniform_real_distribution<float> dist(min, max);
+    for (memory& mem : weights)
+    {
+        std::vector<float> buffer(GetMemoryCount(mem));
+        for (auto& x : buffer)
+            x = dist(mt);
+        mem << buffer;
+    }
+}
+
+void NNetwork::SaveWeights(const std::string& file)
+{
+    std::ofstream fout(file, std::ios::binary);
+    for (memory& mem : weights)
+    {
+        std::string s(GetMemoryByteSize(mem), 0);
+        mem >> (void*)s.c_str();
+        fout.write(s.c_str(), s.length());
+    }
+}
+
+void NNetwork::LoadWeights(const std::string& file)
+{
+    std::ifstream fin(file, std::ios::binary);
+    for (memory& mem : weights)
+    {
+        std::string s(GetMemoryByteSize(mem), 0);
+        fin.read((char*)s.c_str(), s.length());
+        mem << (void*)s.c_str();
+    }
+}
+
 void NNetwork::Forward(const dnnl::stream& s)
 {
-    for (auto cur : fwd)
+    for (auto& cur : fwd)
         cur.first.execute(s, cur.second);
 }
 
 void NNetwork::Backward(const dnnl::stream& s)
 {
-    for (auto cur : bwd)
-    {
-        //std::cerr << "NEXT:\n";
-        //for (auto it = cur.second.begin(); it != cur.second.end(); it++)
-        //    std::cerr << it->first << " ";
-        //std::cerr << "\n";
+    for (auto& cur : bwd)
         cur.first.execute(s, cur.second);
-    }
 }
 
 InputLayer::InputLayer(NNetwork& net, const dnnl::memory::desc& input_desc) : Layer(net)
@@ -155,6 +207,8 @@ void DenseLayer::Init()
 
     weights = memory(weight_md, net.engine);
     output = memory(dst_md, net.engine);
+
+    net.weights.push_back(weights);
 
     auto product_pd = inner_product_forward::primitive_desc({ net.kind, src_md, weight_md, dst_md }, net.engine);
     auto fwd = inner_product_forward(product_pd);
@@ -215,11 +269,6 @@ void DenseLayer::Init()
     }
     net.output = output;
     net.grad = dst_grad;
-}
-
-void DenseLayer::SetWeights(void* handle)
-{
-    weights << handle;
 }
 
 EltwiseLayer::EltwiseLayer(Layer& input, algorithm algo, float alpha, float beta) : Layer(*input.net), input(input), algo(algo), alpha(alpha), beta(beta)
@@ -289,6 +338,10 @@ ReluLayer::ReluLayer(Layer& input, float alpha) : EltwiseLayer(input, algorithm:
 {
 }
 
+SigmoidLayer::SigmoidLayer(Layer& input, float alpha) : EltwiseLayer(input, algorithm::eltwise_logistic)
+{
+}
+
 LayerAdder::LayerAdder(Layer& input1, Layer& input2) : Layer(*input1.net), input1(input1), input2(input2)
 {
     assert(input1.net == input2.net && "Add layers from different networks impossible");
@@ -327,6 +380,7 @@ void LayerAdder::Init()
             Layer& input = *layer;
             if (input.dst_grad)
             {
+                // TODO: allow broadcasting
                 if (input.dependency_count)
                 {
                     auto bwd_update = sum({ { 1, 1 }, {desc, desc}, net.engine });
@@ -386,7 +440,7 @@ void ReorderLayer::Init()
             {
                 if (!input.dst_grad_2)
                     input.dst_grad_2 = memory(src_md, net.engine);
-                net.fwd.push_back({ reorder_bwd,
+                net.bwd.push_back({ reorder_bwd,
                 {
                     {DNNL_ARG_FROM, dst_grad},
                     {DNNL_ARG_TO, input.dst_grad_2},
@@ -401,7 +455,7 @@ void ReorderLayer::Init()
             }
             else
             {
-                net.fwd.push_back({ reorder_bwd,
+                net.bwd.push_back({ reorder_bwd,
                 {
                     {DNNL_ARG_FROM, dst_grad},
                     {DNNL_ARG_TO, input.dst_grad},
@@ -496,6 +550,19 @@ void PoolingLayer::Init()
     net.grad = dst_grad;
 }
 
+GlobalPoolingLayer::GlobalPoolingLayer(Layer& input, algorithm algo) : Layer(*input.net), pool(input, algo, {}, {}, {}, {})
+{
+}
+
+void GlobalPoolingLayer::Init()
+{
+    auto dims = pool.input.output.get_desc().dims();
+    dims.erase(dims.begin(), dims.begin() + 1);
+    pool.kernel = dims;
+    pool.strides = memory::dims(pool.kernel.size(), 1);
+    pool.padding_l = pool.padding_r = memory::dims(pool.kernel.size(), 0);
+}
+
 ConvLayer::ConvLayer(Layer& input, const memory::dims& kernel, const memory::dims& strides, const memory::dims& padding_l, const memory::dims& padding_r) : Layer(*input.net), input(input), kernel(kernel), strides(strides), padding_l(padding_l), padding_r(padding_r)
 {
     input.dependency_count++;
@@ -537,6 +604,8 @@ void ConvLayer::Init()
 
     weights = memory(weights_md, net.engine);
     output = memory(dst_md, net.engine);
+
+    net.weights.push_back(weights);
 
     net.fwd.push_back({ conv_fwd,
         {
@@ -601,4 +670,129 @@ void ConvLayer::Init()
     }
     net.output = output;
     net.grad = dst_grad;
+}
+
+MultiplyLayer::MultiplyLayer(Layer& input1, Layer& input2) : Layer(*input1.net), input1(input1), input2(input2)
+{
+    input1.dependency_count++;
+    input2.dependency_count++;
+}
+
+void MultiplyLayer::Init()
+{
+    NNetwork& net = *this->net;
+    input1.dependency_count--;
+    input2.dependency_count--;
+
+    //auto dims1 = input1.output.get_desc().dims();
+    //auto dims2 = input2.output.get_desc().dims();
+
+    //while (dims1.size() < dims2.size())
+    //    dims1.push_back(1);
+    //while (dims2.size() < dims1.size())
+    //    dims2.push_back(1);
+    //auto src1_md = memory::desc(dims1, memory::data_type::f32, GetStridesForDims(dims1));
+    //auto src2_md = memory::desc(dims2, memory::data_type::f32, GetStridesForDims(dims2));
+    auto src1_md = input1.output.get_desc();
+    auto src2_md = input2.output.get_desc();
+
+    auto mul = binary({ {algorithm::binary_mul, src1_md, src2_md, src1_md}, net.engine });
+
+    output = memory(src1_md, net.engine);
+
+    net.fwd.push_back({ mul,
+    {
+        {DNNL_ARG_SRC_0, input1.output},
+        {DNNL_ARG_SRC_1, input2.output},
+        {DNNL_ARG_DST, output},
+    } });
+
+    // Backward
+    if (net.kind == dnnl::prop_kind::forward_training)
+    {
+        dst_grad = memory(src1_md, net.engine);
+
+        auto reverse_from = net.bwd.size();
+        std::vector<Layer*> layers = { &input1, &input2 };
+        for (int i = 0; i < 2; i++)
+        {
+            Layer& input = *layers[i];
+            Layer& input_other = *layers[1 - i];
+            if (input.dst_grad)
+            {
+                //auto bwd_update = binary({ {algorithm::binary_mul, dst_grad.get_desc(), input_other.output.get_desc(), input.dst_grad.get_desc()}, net.engine });
+                auto bwd_update = binary({ {algorithm::binary_mul, dst_grad.get_desc(), input_other.output.get_desc(), dst_grad.get_desc()}, net.engine });
+                std::vector< std::pair<dnnl::primitive, std::unordered_map<int, dnnl::memory>>> tmp;
+                tmp.push_back({ bwd_update,
+                {
+                    {DNNL_ARG_SRC_0, dst_grad},
+                    {DNNL_ARG_SRC_1, input_other.output},
+                    {DNNL_ARG_DST, input.dst_grad},
+                } });
+                // If used broadcasting should use reduction
+                if (dst_grad.get_desc() != input.dst_grad.get_desc())
+                {
+                    auto tmp_mem = memory(dst_grad.get_desc(), net.engine);
+                    auto bwd_reduce = reduction({ {algorithm::reduction_sum, dst_grad.get_desc(), input.dst_grad.get_desc(), 0, 0}, net.engine });
+                    tmp.back().second[DNNL_ARG_DST] = tmp_mem;
+                    tmp.push_back({bwd_reduce,
+                    {
+                        {DNNL_ARG_SRC, tmp_mem},
+                        {DNNL_ARG_DST, input.dst_grad},
+                    } });
+                }
+                if (input.dependency_count)
+                {
+                    auto desc = input.dst_grad.get_desc();
+                    if (!input.dst_grad_2)
+                        input.dst_grad_2 = memory(desc, net.engine);
+                    tmp.back().second[DNNL_ARG_DST] = input.dst_grad_2;
+                    for (auto& x : tmp)
+                        net.bwd.push_back(x);
+                    auto adder = binary({ {algorithm::binary_add, desc, desc, desc}, net.engine });
+                    net.bwd.push_back({ adder,
+                    {
+                        {DNNL_ARG_SRC_0, input.dst_grad},
+                        {DNNL_ARG_SRC_1, input.dst_grad_2},
+                        {DNNL_ARG_DST, input.dst_grad},
+                    } });
+                }
+                else
+                {
+                    for (auto& x : tmp)
+                        net.bwd.push_back(x);
+                }
+            }
+        }
+        std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
+    }
+    net.output = output;
+    net.grad = dst_grad;
+}
+
+SELayer::SELayer(Layer& input, int ratio) : Layer(*input.net), input(input), ratio(ratio),
+    // Initialization order as defined in header
+    pool(input, algorithm::pooling_avg), 
+    // TODO: Fix pool.pool
+    dense1(pool.pool, 0),
+    relu(dense1),
+    dense2(relu, 0),
+    sigm(dense2),
+    mul(input, sigm)
+{
+    assert(!"multiply WxH = 1x1 not implemented");
+    //int ch = 1;
+    //GlobalPoolingLayer pool(input, algorithm::pooling_avg);
+    //DenseLayer dense1(pool.pool, ch / ratio);
+    //ReluLayer relu(dense1);
+    //DenseLayer dense2(relu, ch);
+    //SigmoidLayer sigm(dense2);
+    //MultiplyLayer mul(input, sigm);
+}
+
+void SELayer::Init()
+{
+    int channel_count = input.output.get_desc().dims()[1];
+    dense1.output_size = channel_count / ratio;
+    dense2.output_size = channel_count;
 }

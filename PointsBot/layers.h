@@ -1,18 +1,25 @@
 #pragma once
 
 #include <dnnl.hpp>
+#include <random>
+
+size_t GetMemoryCount(const dnnl::memory& mem);
+size_t GetMemoryByteSize(const dnnl::memory& mem);
 
 void operator>>(const dnnl::memory& mem, void* handle);
 
 template<typename T>
 void operator>>(const dnnl::memory& mem, std::vector<T>& v)
 {
-    dnnl::memory::dim size = 1;
-    for (auto d : mem.get_desc().dims())
-        size *= d;
-    v.resize(size);
+    v.resize(GetMemoryCount(mem));
     mem >> v.data();
 }
+
+//void operator>>(const dnnl::memory& mem, std::string& s)
+//{
+//    s.resize(GetMemoryByteSize(mem));
+//    mem >> (void*)s.c_str();
+//}
 
 void operator<<(const dnnl::memory& mem, void* handle);
 
@@ -21,6 +28,11 @@ void operator<<(const dnnl::memory& mem, std::vector<T>& v)
 {
     mem << v.data();
 }
+
+//void operator<<(const dnnl::memory& mem, std::string& s)
+//{
+//    mem << (void*)s.c_str();
+//}
 
 struct NNetwork;
 
@@ -46,6 +58,7 @@ public:
     dnnl::engine engine;
     dnnl::prop_kind kind;
     std::vector<Layer*> layers;
+    std::vector<dnnl::memory> weights;
     std::vector< std::pair<dnnl::primitive, std::unordered_map<int, dnnl::memory>>> fwd;
     std::vector< std::pair<dnnl::primitive, std::unordered_map<int, dnnl::memory>>> bwd;
     // TODO: Optimizer
@@ -59,6 +72,9 @@ public:
     
     // Set loss function, optimizer, prepare forward and backward list
     void Build(float learn_rate);
+    void RandomWeights(std::mt19937 &mt, float min = -1, float max = 1);
+    void SaveWeights(const std::string &file);
+    void LoadWeights(const std::string& file);
     void Forward(const dnnl::stream& s);
     void Backward(const dnnl::stream& s);
     // GetInputMemory
@@ -78,6 +94,8 @@ public:
     void SetInput(void* handle);
 };
 
+// TODO: Bias
+
 struct DenseLayer : Layer
 {
     Layer& input;
@@ -88,8 +106,6 @@ public:
     DenseLayer(Layer& input, int output_size);
 
     virtual void Init() override;
-
-    void SetWeights(void* handle);
 };
 
 struct EltwiseLayer : Layer
@@ -105,7 +121,14 @@ public:
 
 struct ReluLayer : EltwiseLayer
 {
+public:
     ReluLayer(Layer& input, float alpha = 0);
+};
+
+struct SigmoidLayer : EltwiseLayer
+{
+public:
+    SigmoidLayer(Layer& input, float alpha = 0);
 };
 
 struct LayerAdder : Layer
@@ -138,6 +161,18 @@ public:
     virtual void Init() override;
 };
 
+// TODO: allow use GlobalPoolingLayer as input instead pool field
+struct GlobalPoolingLayer : Layer
+{
+    // Temporarily use this as input for next layers
+    PoolingLayer pool;
+public:
+    GlobalPoolingLayer(Layer& input, dnnl::algorithm algo);
+    virtual void Init() override;
+};
+
+// TODO: Bias
+
 struct ConvLayer : Layer
 {
     Layer& input;
@@ -145,5 +180,33 @@ struct ConvLayer : Layer
 public:
     dnnl::memory weights;
     ConvLayer(Layer& input, const dnnl::memory::dims& kernel, const dnnl::memory::dims& strides, const dnnl::memory::dims& padding_l, const dnnl::memory::dims& padding_r);
+    virtual void Init() override;
+};
+
+struct MultiplyLayer : Layer
+{
+    Layer& input1;
+    Layer& input2;
+public:
+    MultiplyLayer(Layer& input1, Layer& input2);
+    virtual void Init() override;
+};
+
+// TODO: allow use SELayer as input instead mul field
+struct SELayer : Layer
+{
+    Layer& input;
+    int ratio;
+    // Don't shuffle layers cause of initialization order
+
+    GlobalPoolingLayer pool;
+    DenseLayer dense1;
+    ReluLayer relu;
+    DenseLayer dense2;
+    SigmoidLayer sigm;
+    // Temporarily use this as input for next layers
+    MultiplyLayer mul;
+public:
+    SELayer(Layer& input, int ratio);
     virtual void Init() override;
 };
