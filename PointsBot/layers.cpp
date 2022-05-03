@@ -183,7 +183,7 @@ void InputLayer::SetInput(void* handle)
     output() << handle;
 }
 
-DenseLayer::DenseLayer(Layer& input, int output_size) : Layer(input.net()), input(input), output_size(output_size)
+DenseLayer::DenseLayer(Layer& input, int output_size, bool use_bias) : Layer(input.net()), input(input), output_size(output_size), use_bias(use_bias)
 {
     input.IncDependencies();
 }
@@ -196,29 +196,32 @@ void DenseLayer::Init()
     auto w_dims = src_md.dims();
     w_dims[0] = output_size;
 
-    auto weight_md = memory::desc(
-        w_dims,
-        memory::data_type::f32,
-        GetStridesForDims(w_dims)
-    );
-    auto dst_md = memory::desc(
-        { src_md.data.dims[0], output_size },
-        memory::data_type::f32,
-        memory::format_tag::ab
-    );
+    auto weight_md = memory::desc(w_dims, net.data_type, GetStridesForDims(w_dims));
+    auto dst_md = memory::desc({ src_md.data.dims[0], output_size }, net.data_type, memory::format_tag::ab);
 
     weights = memory(weight_md, net.engine);
     output({ dst_md, net.engine });
 
     net.weights.push_back(weights);
 
-    auto product_pd = inner_product_forward::primitive_desc({ net.kind, src_md, weight_md, dst_md }, net.engine);
+    memory::desc bias_md;
+    if (use_bias)
+    {
+        bias_md = memory::desc({ output_size }, net.data_type, memory::format_tag::a);
+        bias = memory(bias_md, net.engine);
+        net.weights.push_back(bias);
+    }
+
+    auto product_pd = use_bias
+        ? inner_product_forward::primitive_desc({ net.kind, src_md, weight_md, bias_md, dst_md }, net.engine)
+        : inner_product_forward::primitive_desc({ net.kind, src_md, weight_md, dst_md }, net.engine);
     auto fwd = inner_product_forward(product_pd);
 
     net.fwd.push_back({ fwd,
         {
             {DNNL_ARG_SRC, input.output()},
             {DNNL_ARG_WEIGHTS, weights},
+            {DNNL_ARG_BIAS, bias},
             {DNNL_ARG_DST, output()},
         } });
     // Backward
@@ -251,11 +254,15 @@ void DenseLayer::Init()
         }
 
         auto d_weights = memory(weight_md, net.engine);
-        auto bwd_weights = inner_product_backward_weights({ {src_md, weight_md, dst_md}, net.engine, product_pd });
+        auto d_bias = memory(bias_md, net.engine);
+        auto bwd_weights = use_bias
+            ? inner_product_backward_weights({ {src_md, weight_md, bias_md, dst_md}, net.engine, product_pd })
+            : inner_product_backward_weights({ {src_md, weight_md, dst_md}, net.engine, product_pd });
         net.bwd.push_back({ bwd_weights,
             {
                 {DNNL_ARG_SRC, input.output()},
                 {DNNL_ARG_DIFF_WEIGHTS, d_weights},
+                {DNNL_ARG_DIFF_BIAS, d_bias},
                 {DNNL_ARG_DIFF_DST, dst_grad()},
             } });
         // TODO: Optimizer control
@@ -266,6 +273,16 @@ void DenseLayer::Init()
                 {DNNL_ARG_MULTIPLE_SRC + 1, d_weights},
                 {DNNL_ARG_DST, weights},
             } });
+        if (use_bias)
+        {
+            auto bwd_bias_update = sum({ { 1, -net.learn_rate }, {bias_md, bias_md}, net.engine });
+            net.bwd.push_back({ bwd_bias_update,
+                {
+                    {DNNL_ARG_MULTIPLE_SRC + 0, bias},
+                    {DNNL_ARG_MULTIPLE_SRC + 1, d_bias},
+                    {DNNL_ARG_DST, bias},
+                } });
+        }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
     net.output = output();
@@ -300,30 +317,21 @@ void EltwiseLayer::Init()
         auto reverse_from = net.bwd.size();
         if (input.dst_grad())
         {
-            if (input.dependency_count())
+            net.bwd.push_back({ elt_bwd,
             {
-                net.bwd.push_back({ elt_bwd,
-                {
-                    {DNNL_ARG_SRC, input.output()},
-                    {DNNL_ARG_DIFF_SRC, input.dst_grad_2()},
-                    {DNNL_ARG_DIFF_DST, dst_grad()},
-                } });
+                {DNNL_ARG_DIFF_SRC, !input.dependency_count() ? input.dst_grad() : input.dst_grad_2()},
+                {DNNL_ARG_SRC, input.output()},
+                {DNNL_ARG_DIFF_DST, dst_grad()},
+            } });
 
+            if (input.dependency_count()) // grad saved to buffer, so should add to main memory
+            {
                 auto adder = binary({ {algorithm::binary_add, desc, desc, desc}, net.engine });
                 net.bwd.push_back({ adder,
                 {
                     {DNNL_ARG_SRC_0, input.dst_grad()},
                     {DNNL_ARG_SRC_1, input.dst_grad_2()},
                     {DNNL_ARG_DST, input.dst_grad()},
-                } });
-            }
-            else
-            {
-                net.bwd.push_back({ elt_bwd,
-                {
-                    {DNNL_ARG_SRC, input.output()},
-                    {DNNL_ARG_DIFF_SRC, input.dst_grad()},
-                    {DNNL_ARG_DIFF_DST, dst_grad()},
                 } });
             }
         }
@@ -436,27 +444,20 @@ void ReorderLayer::Init()
         if (input.dst_grad())
         {
             auto reorder_bwd = reorder({ dst_grad(), input.dst_grad() });
-            if (input.dependency_count())
+            net.bwd.push_back({ reorder_bwd,
             {
-                net.bwd.push_back({ reorder_bwd,
-                {
-                    {DNNL_ARG_FROM, dst_grad()},
-                    {DNNL_ARG_TO, input.dst_grad_2()},
-                } });
+                {DNNL_ARG_SRC, dst_grad()},
+                {DNNL_ARG_DST, !input.dependency_count() ? input.dst_grad() : input.dst_grad_2()},
+            } });
+
+            if (input.dependency_count()) // grad saved to buffer, so should add to main memory
+            {
                 auto adder = binary({ {algorithm::binary_add, src_md, src_md, src_md}, net.engine });
                 net.bwd.push_back({ adder,
                 {
                     {DNNL_ARG_SRC_0, input.dst_grad()},
                     {DNNL_ARG_SRC_1, input.dst_grad_2()},
                     {DNNL_ARG_DST, input.dst_grad()},
-                } });
-            }
-            else
-            {
-                net.bwd.push_back({ reorder_bwd,
-                {
-                    {DNNL_ARG_FROM, dst_grad()},
-                    {DNNL_ARG_TO, input.dst_grad()},
                 } });
             }
         }
@@ -487,7 +488,7 @@ void PoolingLayer::Init()
         w_dims[i] = (w_dims[i] - kernel[i - 2] + padding_l[i - 2] + padding_r[i - 2]) / strides[i - 2] + 1;
     }
 
-    auto dst_md = memory::desc(w_dims, memory::data_type::f32, GetStridesForDims(w_dims));
+    auto dst_md = memory::desc(w_dims, net.data_type, GetStridesForDims(w_dims));
     auto pool_pd = pooling_forward::primitive_desc({ net.kind, algo, src_md, dst_md, strides, kernel, padding_l, padding_r }, net.engine);
     auto pool_fwd = pooling_forward(pool_pd);
 
@@ -495,11 +496,11 @@ void PoolingLayer::Init()
     output({ dst_md, net.engine });
 
     net.fwd.push_back({ pool_fwd,
-        {
-            {DNNL_ARG_SRC, input.output()},
-            {DNNL_ARG_WORKSPACE, pool_workspace_memory},
-            {DNNL_ARG_DST, output()},
-        } });
+    {
+        {DNNL_ARG_SRC, input.output()},
+        {DNNL_ARG_WORKSPACE, pool_workspace_memory},
+        {DNNL_ARG_DST, output()},
+    } });
     // Backward
     if (net.kind == dnnl::prop_kind::forward_training)
     {
@@ -508,30 +509,21 @@ void PoolingLayer::Init()
         auto reverse_from = net.bwd.size();
         if (input.dst_grad())
         {
-            if (input.dependency_count())
+            net.bwd.push_back({ pool_bwd,
             {
-                net.bwd.push_back({ pool_bwd,
-                {
-                    {DNNL_ARG_DIFF_SRC, input.dst_grad_2()},
-                    {DNNL_ARG_WORKSPACE, pool_workspace_memory},
-                    {DNNL_ARG_DIFF_DST, dst_grad()},
-                } });
+                {DNNL_ARG_DIFF_SRC, !input.dependency_count() ? input.dst_grad() : input.dst_grad_2()},
+                {DNNL_ARG_WORKSPACE, pool_workspace_memory},
+                {DNNL_ARG_DIFF_DST, dst_grad()},
+            } });
 
+            if (input.dependency_count()) // grad saved to buffer, so should add to main memory
+            {
                 auto adder = binary({ {algorithm::binary_add, src_md, src_md, src_md}, net.engine });
                 net.bwd.push_back({ adder,
                 {
                     {DNNL_ARG_SRC_0, input.dst_grad()},
                     {DNNL_ARG_SRC_1, input.dst_grad_2()},
                     {DNNL_ARG_DST, input.dst_grad()},
-                } });
-            }
-            else
-            {
-                net.bwd.push_back({ pool_bwd,
-                {
-                    {DNNL_ARG_DIFF_SRC, input.dst_grad()},
-                    {DNNL_ARG_WORKSPACE, pool_workspace_memory},
-                    {DNNL_ARG_DIFF_DST, dst_grad()},
                 } });
             }
         }
@@ -554,8 +546,8 @@ void GlobalPoolingLayer::Init()
     pool.padding_l = pool.padding_r = memory::dims(pool.kernel.size(), 0);
 }
 
-ConvLayer::ConvLayer(Layer& input, const memory::dims& kernel, const memory::dims& strides, const memory::dims& padding_l, const memory::dims& padding_r)
-    : Layer(input.net()), input(input), kernel(kernel), strides(strides), padding_l(padding_l), padding_r(padding_r)
+ConvLayer::ConvLayer(Layer& input, const memory::dims& kernel, const memory::dims& strides, const memory::dims& padding_l, const memory::dims& padding_r, bool use_bias)
+    : Layer(input.net()), input(input), kernel(kernel), strides(strides), padding_l(padding_l), padding_r(padding_r), use_bias(use_bias)
 {
     input.IncDependencies();
 }
@@ -574,24 +566,35 @@ void ConvLayer::Init()
     }
     w_dims[1] = kernel[0];
 
-    auto weights_md = memory::desc(kernel, memory::data_type::f32, GetStridesForDims(kernel));
-    auto dst_md = memory::desc(w_dims, memory::data_type::f32, GetStridesForDims(w_dims));
+    auto weights_md = memory::desc(kernel, net.data_type, GetStridesForDims(kernel));
+    auto dst_md = memory::desc(w_dims, net.data_type, GetStridesForDims(w_dims));
 
-    auto conv_pd = convolution_forward::primitive_desc({ net.kind, algorithm::convolution_auto, src_md, weights_md, dst_md, strides, padding_l, padding_r }, net.engine);
+    weights = memory(weights_md, net.engine);
+    net.weights.push_back(weights);
+
+    output({ dst_md, net.engine });
+
+    memory::desc bias_md;
+    if (use_bias)
+    {
+        bias_md = memory::desc({ kernel[0] }, net.data_type, memory::format_tag::a);
+        bias = memory(bias_md, net.engine);
+        net.weights.push_back(bias);
+    }
+
+    auto conv_pd = use_bias
+        ? convolution_forward::primitive_desc({ net.kind, algorithm::convolution_auto, src_md, weights_md, bias_md, dst_md, strides, padding_l, padding_r }, net.engine)
+        : convolution_forward::primitive_desc({ net.kind, algorithm::convolution_auto, src_md, weights_md, dst_md, strides, padding_l, padding_r }, net.engine);
 
     auto conv_fwd = convolution_forward(conv_pd);
 
-    weights = memory(weights_md, net.engine);
-    output({ dst_md, net.engine });
-
-    net.weights.push_back(weights);
-
     net.fwd.push_back({ conv_fwd,
-        {
-            {DNNL_ARG_SRC, input.output()},
-            {DNNL_ARG_WEIGHTS, weights},
-            {DNNL_ARG_DST, output()},
-        } });
+    {
+        {DNNL_ARG_SRC, input.output()},
+        {DNNL_ARG_WEIGHTS, weights},
+        {DNNL_ARG_BIAS, bias},
+        {DNNL_ARG_DST, output()},
+    } });
     // Backward
     if (net.kind == dnnl::prop_kind::forward_training)
     {
@@ -600,15 +603,15 @@ void ConvLayer::Init()
         auto reverse_from = net.bwd.size();
         if (input.dst_grad())
         {
-            if (input.dependency_count())
+            net.bwd.push_back({ conv_bwd_data,
             {
-                net.bwd.push_back({ conv_bwd_data,
-                {
-                    {DNNL_ARG_DIFF_SRC, input.dst_grad_2()},
-                    {DNNL_ARG_WEIGHTS, weights},
-                    {DNNL_ARG_DIFF_DST, dst_grad()},
-                } });
+                {DNNL_ARG_DIFF_SRC, !input.dependency_count() ? input.dst_grad() : input.dst_grad_2()},
+                {DNNL_ARG_WEIGHTS, weights},
+                {DNNL_ARG_DIFF_DST, dst_grad()},
+            } });
 
+            if (input.dependency_count()) // grad saved to buffer, so should add to main memory
+            {
                 auto adder = binary({ {algorithm::binary_add, src_md, src_md, src_md}, net.engine });
                 net.bwd.push_back({ adder,
                 {
@@ -617,32 +620,37 @@ void ConvLayer::Init()
                     {DNNL_ARG_DST, input.dst_grad()},
                 } });
             }
-            else
-            {
-                net.bwd.push_back({ conv_bwd_data,
-                {
-                    {DNNL_ARG_DIFF_SRC, input.dst_grad()},
-                    {DNNL_ARG_WEIGHTS, weights},
-                    {DNNL_ARG_DIFF_DST, dst_grad()},
-                } });
-            }
         }
         auto d_weights = memory(weights_md, net.engine);
-        auto conv_bwd_weights = convolution_backward_weights({ { algorithm::convolution_auto, src_md, weights_md, dst_md, strides, padding_l, padding_r }, net.engine, conv_pd });
+        auto d_bias = memory(bias_md, net.engine);
+        auto conv_bwd_weights = use_bias
+            ? convolution_backward_weights({ { algorithm::convolution_auto, src_md, weights_md, bias_md, dst_md, strides, padding_l, padding_r }, net.engine, conv_pd })
+            : convolution_backward_weights({ { algorithm::convolution_auto, src_md, weights_md, dst_md, strides, padding_l, padding_r }, net.engine, conv_pd });
         net.bwd.push_back({ conv_bwd_weights,
             {
                 {DNNL_ARG_SRC, input.output()},
                 {DNNL_ARG_DIFF_WEIGHTS, d_weights},
+                {DNNL_ARG_DIFF_BIAS, d_bias},
                 {DNNL_ARG_DIFF_DST, dst_grad()},
             } });
         // TODO: Optimizer control
         auto bwd_weights_update = sum({ { 1, -net.learn_rate }, {weights_md, weights_md}, net.engine });
         net.bwd.push_back({ bwd_weights_update,
+        {
+            {DNNL_ARG_MULTIPLE_SRC + 0, weights},
+            {DNNL_ARG_MULTIPLE_SRC + 1, d_weights},
+            {DNNL_ARG_DST, weights},
+        } });
+        if (use_bias)
+        {
+            auto bwd_bias_update = sum({ { 1, -net.learn_rate }, {bias_md, bias_md}, net.engine });
+            net.bwd.push_back({ bwd_bias_update,
             {
-                {DNNL_ARG_MULTIPLE_SRC + 0, weights},
-                {DNNL_ARG_MULTIPLE_SRC + 1, d_weights},
-                {DNNL_ARG_DST, weights},
+                {DNNL_ARG_MULTIPLE_SRC + 0, bias},
+                {DNNL_ARG_MULTIPLE_SRC + 1, d_bias},
+                {DNNL_ARG_DST, bias},
             } });
+        }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
     net.output = output();
@@ -689,7 +697,6 @@ void MultiplyLayer::Init()
             Layer& input_other = *layers[1 - i];
             if (input.dst_grad())
             {
-                //auto bwd_update = binary({ {algorithm::binary_mul, output_desc(), input_other.output_desc(), input.output_desc()}, net.engine });
                 auto bwd_update = binary({ {algorithm::binary_mul, output_desc(), input_other.output_desc(), output_desc()}, net.engine });
                 std::vector< std::pair<dnnl::primitive, std::unordered_map<int, dnnl::memory>>> tmp;
                 tmp.push_back({ bwd_update,
@@ -752,8 +759,8 @@ void ReshapeLayer::Init()
     output_md = input.output_desc().reshape(output_dims);
 }
 
-SELayer::SELayer(Layer& input, int ratio)
-    : Layer(input.net()), input(input), ratio(ratio),
+SELayer::SELayer(Layer& input, int inner_size)
+    : Layer(input.net()), input(input), inner_size(inner_size),
     // Initialization order as defined in header
     pool(input, algorithm::pooling_avg),
     dense1(pool, 0),
@@ -772,6 +779,6 @@ SELayer::SELayer(Layer& input, int ratio)
 void SELayer::Init()
 {
     int channel_count = input.output_desc().dims()[1];
-    dense1.output_size = channel_count / ratio;
+    dense1.output_size = inner_size;
     dense2.output_size = channel_count;
 }

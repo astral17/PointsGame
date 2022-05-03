@@ -77,6 +77,7 @@ struct NNetwork
 public:
     dnnl::engine engine;
     dnnl::prop_kind kind;
+    dnnl::memory::data_type data_type = dnnl::memory::data_type::f32;
     std::vector<Layer*> layers;
     std::vector<dnnl::memory> weights;
     std::vector< std::pair<dnnl::primitive, std::unordered_map<int, dnnl::memory>>> fwd;
@@ -115,16 +116,16 @@ public:
     void SetInput(void* handle);
 };
 
-// TODO: Bias
-
 struct DenseLayer : Layer
 {
     Layer& input;
     int output_size;
+    bool use_bias;
 public:
     dnnl::memory weights;
+    dnnl::memory bias;
 
-    DenseLayer(Layer& input, int output_size);
+    DenseLayer(Layer& input, int output_size, bool use_bias = true);
 
     virtual void Init() override;
 };
@@ -208,9 +209,11 @@ struct ConvLayer : Layer
 {
     Layer& input;
     dnnl::memory::dims kernel, strides, padding_l, padding_r;
+    bool use_bias;
 public:
     dnnl::memory weights;
-    ConvLayer(Layer& input, const dnnl::memory::dims& kernel, const dnnl::memory::dims& strides, const dnnl::memory::dims& padding_l, const dnnl::memory::dims& padding_r);
+    dnnl::memory bias;
+    ConvLayer(Layer& input, const dnnl::memory::dims& kernel, const dnnl::memory::dims& strides, const dnnl::memory::dims& padding_l, const dnnl::memory::dims& padding_r, bool use_bias = true);
     virtual void Init() override;
 };
 
@@ -254,7 +257,7 @@ public:
 struct SELayer : Layer
 {
     Layer& input;
-    int ratio;
+    int inner_size;
     // Don't shuffle layers cause of initialization order
 
     GlobalPoolingLayer pool;
@@ -265,7 +268,7 @@ struct SELayer : Layer
     ReshapeLayer reshape;
     MultiplyLayer mul;
 public:
-    SELayer(Layer& input, int ratio);
+    SELayer(Layer& input, int inner_size);
 
     // Getter
     virtual dnnl::memory output() const override { return mul.output(); }
