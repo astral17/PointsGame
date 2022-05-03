@@ -2,7 +2,9 @@
 
 #include <dnnl.hpp>
 #include <random>
+#include <functional>
 
+dnnl::memory::dims GetStridesForDims(const dnnl::memory::dims& dims);
 size_t GetMemoryCount(const dnnl::memory& mem);
 size_t GetMemoryByteSize(const dnnl::memory& mem);
 
@@ -38,16 +40,34 @@ struct NNetwork;
 
 // TODO: Layer classes just shared_ptr to memory, for in place build network
 
-struct Layer
+class Layer
 {
-public:
-    NNetwork* net = nullptr;
-    dnnl::memory output;
-    dnnl::memory dst_grad;
-    // Temp buffer, if dst_grad already used
-    dnnl::memory dst_grad_2;
+    // TODO: separate interface from variable defenition?
 
-    int dependency_count = 0;
+    NNetwork* net_ = nullptr;
+    dnnl::memory output_;
+    dnnl::memory dst_grad_;
+    dnnl::memory dst_grad_2_;
+
+    int dependency_count_ = 0;
+public:
+    NNetwork& net() const { return *net_; }
+    // Getter for output/dst_grad/dst_grad_2 memory descriptor
+    virtual dnnl::memory::desc output_desc() const { return output().get_desc(); }
+    // Getter
+    virtual dnnl::memory output() const { return output_; }
+    // Setter
+    virtual dnnl::memory output(const dnnl::memory& output) { return output_ = output; }
+    // Getter, init field if needed
+    virtual dnnl::memory dst_grad() const { return dst_grad_; }
+    virtual dnnl::memory dst_grad(const dnnl::memory& dst_grad) { return dst_grad_ = dst_grad; }
+    // Temp buffer, if dst_grad already used
+    // Getter, init field if needed
+    virtual dnnl::memory dst_grad_2();
+    virtual int dependency_count() const { return dependency_count_; }
+    virtual int dependency_count(int count) { return dependency_count_ = count; }
+    void IncDependencies() { dependency_count(dependency_count() + 1); }
+    void DecDependencies() { dependency_count(dependency_count() - 1); }
     Layer(NNetwork& net);
     virtual void Init() = 0;
 };
@@ -79,6 +99,7 @@ public:
     void Backward(const dnnl::stream& s);
     // GetInputMemory
     // GetOutputMemory
+    // TODO: Make getter/setter from layer?
     dnnl::memory input;
     dnnl::memory output;
     dnnl::memory grad;
@@ -161,13 +182,23 @@ public:
     virtual void Init() override;
 };
 
-// TODO: allow use GlobalPoolingLayer as input instead pool field
 struct GlobalPoolingLayer : Layer
 {
-    // Temporarily use this as input for next layers
     PoolingLayer pool;
 public:
     GlobalPoolingLayer(Layer& input, dnnl::algorithm algo);
+    // Getter
+    virtual dnnl::memory output() const override { return pool.output(); }
+    // Setter
+    virtual dnnl::memory output(const dnnl::memory& output) override { return pool.output(output); }
+    // Getter, init field if needed
+    virtual dnnl::memory dst_grad() const override { return pool.dst_grad(); }
+    virtual dnnl::memory dst_grad(const dnnl::memory& dst_grad) override { return pool.dst_grad(dst_grad); }
+    // Temp buffer, if dst_grad already used
+    // Getter, init field if needed
+    virtual dnnl::memory dst_grad_2() override { return pool.dst_grad_2(); }
+    virtual int dependency_count() const override { return pool.dependency_count(); }
+    virtual int dependency_count(int count) override { return pool.dependency_count(count); }
     virtual void Init() override;
 };
 
@@ -192,7 +223,34 @@ public:
     virtual void Init() override;
 };
 
-// TODO: allow use SELayer as input instead mul field
+struct ReshapeLayer : Layer
+{
+    Layer& input;
+    dnnl::memory::desc output_md;
+    dnnl::memory::dims output_dims;
+    std::function<dnnl::memory::dims(const dnnl::memory::dims&)> src2dst;
+public:
+    ReshapeLayer(Layer& input, dnnl::memory::dims output_dims);
+    ReshapeLayer(Layer& input, const std::function<dnnl::memory::dims(dnnl::memory::dims)>& src2dst);
+
+    // Getter for output/dst_grad/dst_grad_2 memory descriptor
+    virtual dnnl::memory::desc output_desc() const override { return output_md; }
+    // Getter
+    virtual dnnl::memory output() const override { return input.output(); }
+    // Setter
+    virtual dnnl::memory output(const dnnl::memory& output) override { return input.output(output); }
+    // Getter, init field if needed
+    virtual dnnl::memory dst_grad() const override { return input.dst_grad(); }
+    virtual dnnl::memory dst_grad(const dnnl::memory& dst_grad) override { return input.dst_grad(dst_grad); }
+    // Temp buffer, if dst_grad already used
+    // Getter, init field if needed
+    virtual dnnl::memory dst_grad_2() override { return input.dst_grad_2(); }
+    virtual int dependency_count() const override { return input.dependency_count(); }
+    virtual int dependency_count(int count) override { return input.dependency_count(count); }
+
+    virtual void Init() override;
+};
+
 struct SELayer : Layer
 {
     Layer& input;
@@ -204,9 +262,23 @@ struct SELayer : Layer
     ReluLayer relu;
     DenseLayer dense2;
     SigmoidLayer sigm;
-    // Temporarily use this as input for next layers
+    ReshapeLayer reshape;
     MultiplyLayer mul;
 public:
     SELayer(Layer& input, int ratio);
+
+    // Getter
+    virtual dnnl::memory output() const override { return mul.output(); }
+    // Setter
+    virtual dnnl::memory output(const dnnl::memory& output) override { return mul.output(output); }
+    // Getter, init field if needed
+    virtual dnnl::memory dst_grad() const override { return mul.dst_grad(); }
+    virtual dnnl::memory dst_grad(const dnnl::memory& dst_grad) override { return mul.dst_grad(dst_grad); }
+    // Temp buffer, if dst_grad already used
+    // Getter, init field if needed
+    virtual dnnl::memory dst_grad_2() override { return mul.dst_grad_2(); }
+    virtual int dependency_count() const override { return mul.dependency_count(); }
+    virtual int dependency_count(int count) override { return mul.dependency_count(count); }
+
     virtual void Init() override;
 };
