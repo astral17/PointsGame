@@ -9,7 +9,7 @@ public:
 	FastQueue(IndexType size) : q(new T[size]), size(size), l(0), r(0) {}
 	FastQueue(const FastQueue& other) : q(new T[other.size]), size(other.size), l(other.l), r(other.r)
 	{
-		std::copy_n(other.q, other.r, q);
+		std::copy_n(other.q.get(), other.r, q.get());
 	}
 
 	inline const T operator[](const int i) const { return q[i]; }

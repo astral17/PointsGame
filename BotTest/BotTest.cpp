@@ -1,5 +1,6 @@
 ﻿// BotTest.cpp : Этот файл содержит функцию "main". Здесь начинается и заканчивается выполнение программы.
 //
+#define _GLIBCXX_DEBUG
 
 #include <algorithm>
 #include <string>
@@ -9,6 +10,9 @@
 #include "uct.cpp"
 #include "alpha_beta.cpp"
 #include "bns.cpp"
+#include "layers.cpp"
+#include "train.cpp"
+#include "mcts.h"
 #include <Windows.h>
 
 using namespace std;
@@ -187,6 +191,19 @@ int main()
 	QueryPerformanceFrequency(&frequency);
 	LARGE_INTEGER stime;
 	QueryPerformanceCounter(&stime);
+	//NNetwork* net = (NNetwork*)malloc(sizeof(NNetwork));
+	//Field field(5, 5);
+	//mt19937 gen;
+	//for (int i = 0; i < field.height; i++)
+	//	for (int j = 0; j < field.width; j++)
+	//		field.field[field.ToMove(j, field.height - 1 - i)] = SetField[i * field.width + j];
+	//field.DebugPrint(cout, "Before", true, true);
+	//Move m_move = Mcts(field, *net, gen, 1000);
+	////Move m_move = Uct(field, gen, 100);
+	//field.MakeMove(m_move);
+	//field.DebugPrint(cout, "After", true, true);
+	Trainer();
+	return 0;
 	//Field field(3, 3, 1);
 	//field.MakeMove(field.ToMove(1, 1));
 	//field.MakeMove(field.ToMove(1, 2));
@@ -219,14 +236,14 @@ int main()
 	//cout << (int)field.field[move] << "\n";
 	//cout << field.ToX(move) << " " << field.ToY(move) << "\n";
 	
-	//field.MakeMove(field.ToMove(10, 10));
-	//field.MakeMove(field.ToMove(10, 9));
-	//field.MakeMove(field.ToMove(11, 9));
-	//field.MakeMove(field.ToMove(11, 18));
-	//field.MakeMove(field.ToMove(12, 10));
-	//field.MakeMove(field.ToMove(12, 9));
-	//field.MakeMove(field.ToMove(11, 11));
-	//field.MakeMove(field.ToMove(11, 10));
+	field.MakeMove(field.ToMove(10, 10));
+	field.MakeMove(field.ToMove(10, 9));
+	field.MakeMove(field.ToMove(11, 9));
+	field.MakeMove(field.ToMove(11, 18));
+	field.MakeMove(field.ToMove(12, 10));
+	field.MakeMove(field.ToMove(12, 9));
+	field.MakeMove(field.ToMove(11, 11));
+	field.MakeMove(field.ToMove(11, 10));
 	mt19937 mt;
 	//for (int i = 0; i < 100; i++)
 	//cout << Uct(field, mt, 100000) << "\n";
@@ -234,7 +251,18 @@ int main()
 	//cout << Uct(field, mt, 450000) << "\n";
 	//cout << AlphaBeta(field, 3);
 	//cout << Uct(field, mt, 10000) << "\n";
-	Move move = Uct(field, mt, 1000000);
+	//*
+	Move move = Uct(field, mt, 1000000); // Used time: 34.0991//*/
+	/*
+	field.MakeMove(field.ToMove(10, 10));
+	field.MakeMove(field.ToMove(10, 9));
+	field.MakeMove(field.ToMove(11, 9));
+	field.MakeMove(field.ToMove(11, 18));
+	field.MakeMove(field.ToMove(12, 10));
+	field.MakeMove(field.ToMove(12, 9));
+	field.MakeMove(field.ToMove(11, 11));
+	field.MakeMove(field.ToMove(11, 10));
+	Move move = Uct(field, mt, 10000000); // Used time: 42.039	 40.9766//*/
 	//Move move = AlphaBeta(field, mt, 6);
 	//field.MakeMove(394);
 	//Move move = BestNodeSearch(field, mt, 6);

@@ -31,6 +31,41 @@ size_t GetMemoryByteSize(const dnnl::memory& mem)
     return mem.get_desc().get_size();
 }
 
+void* MemoryMapData(const dnnl::memory& mem)
+{
+    dnnl::engine eng = mem.get_engine();
+
+#if DNNL_GPU_RUNTIME == DNNL_RUNTIME_OCL
+    if (eng.get_kind() == dnnl::engine::kind::gpu)
+        return mem.map_data();
+#endif
+
+    if (eng.get_kind() == dnnl::engine::kind::cpu)
+        return mem.get_data_handle();
+
+    assert(!"not expected");
+}
+
+void MemoryUnmapData(const dnnl::memory& mem, void* handle)
+{
+    {
+        dnnl::engine eng = mem.get_engine();
+
+#if DNNL_GPU_RUNTIME == DNNL_RUNTIME_OCL
+        if (eng.get_kind() == dnnl::engine::kind::gpu)
+        {
+            mem.unmap_data(mapped_ptr);
+            return;
+        }
+#endif
+
+        if (eng.get_kind() == dnnl::engine::kind::cpu)
+            return;
+
+        assert(!"not expected");
+    }
+}
+
 void operator>>(const dnnl::memory& mem, void* handle)
 {
     dnnl::engine eng = mem.get_engine();
@@ -100,23 +135,40 @@ Layer::Layer(NNetwork& net) : net_(&net)
     net.layers.push_back(this);
 }
 
-NNetwork::NNetwork(dnnl::engine eng, dnnl::prop_kind kind) : engine(eng), kind(kind) {}
+NNetwork::NNetwork(const dnnl::engine& eng, dnnl::prop_kind kind, dnnl::memory::data_type data_type) : engine(eng), kind(kind), data_type(data_type)
+{
+}
 
-void NNetwork::Build(float learn_rate)
+void NNetwork::Build(const std::vector<Layer*>& output, float learn_rate)
 {
     this->learn_rate = learn_rate;
+    if (kind == prop_kind::forward_training)
+    {
+        for (Layer* layer : output)
+            layer->IncDependencies();
+    }
     for (auto layer : layers)
         layer->Init();
-
-    auto desc = output.get_desc();
-    auto subber = binary({ {algorithm::binary_sub, desc, desc, desc}, engine });
-    answer = memory(desc, engine);
-    bwd.push_back({ subber,
+    auto reverse_from = bwd.size();
+    for (Layer* layer : output)
+    {
+        auto desc = layer->output_desc();
+        outputs.push_back(layer->output());
+        answers.push_back(memory(desc, engine));
+        if (kind == prop_kind::forward_training)
         {
-            {DNNL_ARG_SRC_0, output},
-            {DNNL_ARG_SRC_1, answer},
-            {DNNL_ARG_DST, grad},
-        } });
+            layer->DecDependencies();
+            auto subber = binary({ {algorithm::binary_sub, desc, desc, desc}, engine });
+            grads.push_back(layer->dst_grad());
+            bwd.push_back({ subber,
+            {
+                {DNNL_ARG_SRC_0, outputs.back()},
+                {DNNL_ARG_SRC_1, answers.back()},
+                {DNNL_ARG_DST, grads.back()},
+            } });
+        }
+    }
+    std::reverse(bwd.begin() + reverse_from, bwd.end());
     std::reverse(bwd.begin(), bwd.end());
 }
 
@@ -164,6 +216,10 @@ void NNetwork::Backward(const dnnl::stream& s)
 {
     for (auto& cur : bwd)
         cur.first.execute(s, cur.second);
+}
+
+InputLayer::InputLayer(NNetwork& net, const dnnl::memory::dims& adims) : InputLayer(net, {adims, net.data_type, GetStridesForDims(adims)})
+{
 }
 
 InputLayer::InputLayer(NNetwork& net, const dnnl::memory::desc& input_desc) : Layer(net)
@@ -285,8 +341,6 @@ void DenseLayer::Init()
         }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
-    net.output = output();
-    net.grad = dst_grad();
 }
 
 EltwiseLayer::EltwiseLayer(Layer& input, algorithm algo, float alpha, float beta) : Layer(input.net()), input(input), algo(algo), alpha(alpha), beta(beta)
@@ -337,8 +391,6 @@ void EltwiseLayer::Init()
         }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
-    net.output = output();
-    net.grad = dst_grad();
 }
 
 ReluLayer::ReluLayer(Layer& input, float alpha) : EltwiseLayer(input, algorithm::eltwise_relu, alpha)
@@ -413,8 +465,6 @@ void LayerAdder::Init()
         }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
-    net.output = output();
-    net.grad = dst_grad();
 }
 
 ReorderLayer::ReorderLayer(Layer& input, dnnl::memory::desc dst_md) : Layer(input.net()), input(input), dst_md(dst_md)
@@ -464,8 +514,6 @@ void ReorderLayer::Init()
 
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
-    net.output = output();
-    net.grad = dst_grad();
 }
 
 PoolingLayer::PoolingLayer(Layer& input, dnnl::algorithm algo, const dnnl::memory::dims& strides, const dnnl::memory::dims& kernel, const dnnl::memory::dims& padding_l, const dnnl::memory::dims& padding_r)
@@ -529,8 +577,6 @@ void PoolingLayer::Init()
         }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
-    net.output = output();
-    net.grad = dst_grad();
 }
 
 GlobalPoolingLayer::GlobalPoolingLayer(Layer& input, algorithm algo) : Layer(input.net()), pool(input, algo, {}, {}, {}, {})
@@ -653,8 +699,6 @@ void ConvLayer::Init()
         }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
-    net.output = output();
-    net.grad = dst_grad();
 }
 
 MultiplyLayer::MultiplyLayer(Layer& input1, Layer& input2) : Layer(input1.net()), input1(input1), input2(input2)
@@ -740,8 +784,6 @@ void MultiplyLayer::Init()
         }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
-    net.output = output();
-    net.grad = dst_grad();
 }
 
 ReshapeLayer::ReshapeLayer(Layer& input, dnnl::memory::dims output_dims) : Layer(input.net()), input(input), output_dims(output_dims)

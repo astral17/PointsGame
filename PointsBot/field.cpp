@@ -6,7 +6,7 @@ void Field::MakeMove(Move move)
 	Cell old = field[move];
 	SetOwner(move, player);
 	//ApplyFlag(move, player | kPointBit);
-	ApplyFlag(move, kPointBit);
+	ApplyFlag(move, kPointBit | (player << kColorShift));
 	// Произошёл ли захват?, Если да, то обновить поле
 	//MoveList visited;
 	int ucnt = (Up(Left(move)) & kPointBit) + (Up(move) & kPointBit) + (Up(Right(move)) & kPointBit);

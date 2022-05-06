@@ -4,9 +4,15 @@
 #include <random>
 #include <functional>
 
+#include <assert.h>
+
 dnnl::memory::dims GetStridesForDims(const dnnl::memory::dims& dims);
 size_t GetMemoryCount(const dnnl::memory& mem);
 size_t GetMemoryByteSize(const dnnl::memory& mem);
+
+void* MemoryMapData(const dnnl::memory& mem);
+
+void MemoryUnmapData(const dnnl::memory& mem, void* handle);
 
 void operator>>(const dnnl::memory& mem, void* handle);
 
@@ -77,7 +83,7 @@ struct NNetwork
 public:
     dnnl::engine engine;
     dnnl::prop_kind kind;
-    dnnl::memory::data_type data_type = dnnl::memory::data_type::f32;
+    dnnl::memory::data_type data_type;
     std::vector<Layer*> layers;
     std::vector<dnnl::memory> weights;
     std::vector< std::pair<dnnl::primitive, std::unordered_map<int, dnnl::memory>>> fwd;
@@ -89,27 +95,28 @@ public:
 
     //NNetwork(dnnl::engine eng, int input_size, dnnl::prop_kind kind = dnnl::prop_kind::forward_training) : engine(eng), kind(kind) {}
 
-    NNetwork(dnnl::engine eng, dnnl::prop_kind kind = dnnl::prop_kind::forward_training);
+    NNetwork(const dnnl::engine& eng, dnnl::prop_kind kind = dnnl::prop_kind::forward_training, dnnl::memory::data_type data_type = dnnl::memory::data_type::f32);
     
     // Set loss function, optimizer, prepare forward and backward list
-    void Build(float learn_rate);
+    void Build(const std::vector<Layer*>& output, float learn_rate);
     void RandomWeights(std::mt19937 &mt, float min = -1, float max = 1);
     void SaveWeights(const std::string &file);
     void LoadWeights(const std::string& file);
     void Forward(const dnnl::stream& s);
     void Backward(const dnnl::stream& s);
-    // GetInputMemory
-    // GetOutputMemory
-    // TODO: Make getter/setter from layer?
     dnnl::memory input;
-    dnnl::memory output;
-    dnnl::memory grad;
-    dnnl::memory answer;
+    std::vector<dnnl::memory> outputs;
+    std::vector<dnnl::memory> grads;
+    std::vector<dnnl::memory> answers;
+    dnnl::memory output(size_t index = 0) { return outputs[index]; }
+    dnnl::memory grad(size_t index = 0) { return grads[index]; }
+    dnnl::memory answer(size_t index = 0) { return answers[index]; }
 };
 
 struct InputLayer : Layer
 {
 public:
+    InputLayer(NNetwork& net, const dnnl::memory::dims& adims);
     InputLayer(NNetwork& net, const dnnl::memory::desc& input_desc);
     InputLayer(NNetwork& net, const dnnl::memory::dims& adims, dnnl::memory::data_type adata_type, dnnl::memory::format_tag aformat_tag);
     virtual void Init() override;

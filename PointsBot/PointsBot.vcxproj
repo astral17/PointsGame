@@ -189,6 +189,7 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="field.cpp" />
     <ClCompile Include="layers.cpp" />
+    <ClCompile Include="train.cpp" />
     <ClCompile Include="uct.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -198,6 +199,8 @@
     <ClInclude Include="fast_queue.h" />
     <ClInclude Include="field.h" />
     <ClInclude Include="layers.h" />
+    <ClInclude Include="mcts.h" />
+    <ClInclude Include="train.h" />
     <ClInclude Include="uct.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

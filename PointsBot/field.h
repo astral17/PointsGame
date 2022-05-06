@@ -19,7 +19,7 @@ constexpr Player kPlayerBlack = 1;
 class Field
 {
 public:
-	Field(short height, short width, Player player = 0) : field(new Cell[(width + 2) * (height + 2)]), q((width + 2) * (height + 2)), width(width), height(height), player(player)
+	Field(short height, short width, Player player = kPlayerRed) : field(new Cell[(width + 2) * (height + 2)]), q((width + 2) * (height + 2)), width(width), height(height), player(player)
 	{
 		for (int i = 0; i < Length(); i++)
 			field[i] = 0;
@@ -28,18 +28,34 @@ public:
 		for (int i = -1; i <= width; i++)
 			field[ToMove(i, -1)] = field[ToMove(i, height)] = kBorderBit;
 	}
-	Field(const Field& other) : Field(other.height, other.width, other.player)
+	//Field(const Field& other) : Field(other.height, other.width, other.player)
+	//{
+	//	for (int i = 0; i < Length(); i++)
+	//		field[i] = other.field[i];
+	//	scores.back() = score = other.score;
+	//}
+
+	Field(const Field& other) : q((other.width + 2)* (other.height + 2)), field(new Cell[(other.width + 2) * (other.height + 2)]), width(other.width), height(other.height), score(other.score), player(other.player)
 	{
-		for (int i = 0; i < Length(); i++)
-			field[i] = other.field[i];
-		scores.back() = score = other.score;
+		std::copy_n(other.field.get(), (width + 2) * (height + 2), field.get());
+		scores.back() = score;
 	}
+
 	inline bool CouldMove(Move move) const { return !(field[move] & kCouldMove); }
 	inline bool IsPoint(Move move) const { return field[move] & kPointBit; }
 	inline bool IsPlayerPoint(const Move move, const Player player) const
 	{
 		return (field[move] & (kPlayerBit | kPointBit)) == (kPointBit | player); 
 	}
+
+	inline bool IsRedPoint(const Move move) const { return IsPoint(move) && !(field[move] & kColorBit); }
+	inline bool IsBlackPoint(const Move move) const { return IsPoint(move) && (field[move] & kColorBit); }
+	
+	inline bool IsRedArea(const Move move) const { return (field[move] & kBaseBit) && GetOwner(move) == kPlayerRed; }
+	inline bool IsBlackArea(const Move move) const { return (field[move] & kBaseBit) && GetOwner(move) == kPlayerBlack; }
+
+	inline bool IsRedEmpty(const Move move) const { return IsEmptyBase(move) && GetOwner(move) == kPlayerRed; }
+	inline bool IsBlackEmpty(const Move move) const { return IsEmptyBase(move) && GetOwner(move) == kPlayerBlack; }
 
 	inline bool IsBorder(const Move move) const { return field[move] & kBorderBit; }
 	inline bool HaveOwner(const Move move) const { return field[move] & kHaveOwner; }
@@ -49,7 +65,7 @@ public:
 
 	inline bool IsOwner(const Move move, const Player player) const { return HaveOwner(move) && GetOwner(move) == player; }
 
-	inline bool IsEmptyBase(const Move move) { return field[move] & kEmptyBaseBit; }
+	inline bool IsEmptyBase(const Move move) const { return field[move] & kEmptyBaseBit; }
 
 	inline void SetBorder(const Move move) { field[move] |= kBorderBit; }
 	inline void DelBorder(const Move move) { field[move] &= ~kBorderBit; }
@@ -79,8 +95,10 @@ public:
 	Move MinMove() const { return ToMove(0, 0); }
 	inline Move MaxMove() const { return ToMove(width - 1, height - 1); }
 
-	inline short ToX(const short cur_pos) const { return cur_pos % (width + 2) - 1; }
-	inline short ToY(const short cur_pos) const { return cur_pos / (width + 2) - 1; }
+	inline static short ToX(Move move, short width) { return move % (width + 2) - 1; }
+	inline static short ToY(Move move, short width) { return move / (width + 2) - 1; }
+	inline short ToX(Move move) const { return ToX(move, width); }
+	inline short ToY(Move move) const { return ToY(move, width); }
 
 	void DebugPrint(std::ostream &out, const std::string s = "", bool axis = true, bool colors = false) const
 	{
@@ -131,12 +149,16 @@ private:
 	void DestroyEmpty(Move start);
 	enum Masks : Cell
 	{
+		// Cell owner
 		kPlayerBit = 0x1,
 		kPointBit = 0x2,
 		kBaseBit = 0x4,
 		kEmptyBaseBit = 0x8,
 		kBorderBit = 0x10,
 		kVisitedBit = 0x20,
+		// Original points color
+		kColorBit = 0x40,
+		kColorShift = 6,
 		kCouldMove = kPointBit | kBaseBit | kBorderBit,
 		kHaveOwner = kPointBit | kBaseBit | kEmptyBaseBit,
 	};
