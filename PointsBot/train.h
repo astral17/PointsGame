@@ -82,39 +82,52 @@ struct NeuralStrategy : Strategy
     {
         NNetwork net(eng, kind);
         //InputLayer in(net, { batch, 6 * FIELD_HEIGHT * FIELD_WIDTH });
-        //DenseLayer dense1(in, 100);
+        //DenseLayer dense1(in, 500);
         //ReluLayer relu(dense1);
-        //DenseLayer dense_policy(relu, 100);
-        //SigmoidLayer sigm(dense_policy);
+        //DenseLayer dense_policy(relu, FIELD_HEIGHT * FIELD_WIDTH);
+        //TanhLayer tanh1(dense_policy);
         //DenseLayer dense_value(relu, 1);
-        //SigmoidLayer sigm2(dense_value);
-        //net.Build({ &sigm, &sigm2 }, 1e-3);
-
-        InputLayer in(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH });
+        //TanhLayer tanh2(dense_value);
+        //net.Build({ &tanh1, &tanh2 }, 1e-1);
         constexpr int kFilters = 16;
-        ConvLayer conv(in, { kFilters, 6, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 });
+        vector<unique_ptr<Layer>> layers;
+        layers.emplace_back(new InputLayer(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH }));
+        layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, 6, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        layers.emplace_back(new BatchNormLayer(*layers.back()));
+        //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
 
-        ConvLayer conv1_1(conv, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 });
-        ConvLayer conv1_2(conv1_1, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 });
-        SELayer se1(conv1_2, kFilters);
-        LayerAdder add1(conv, se1);
-        ReluLayer relu1(add1);
+        for (int i = 0; i < 8; i++)
+        {
+            Layer& residual = *layers.back();
+            layers.emplace_back(new ConvLayer(residual, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+            //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
+            layers.emplace_back(new BatchNormLayer(*layers.back()));
+            layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+            //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
+            layers.emplace_back(new BatchNormLayer(*layers.back()));
+            layers.emplace_back(new SELayer(*layers.back(), kFilters));
+            layers.emplace_back(new LayerAdder(residual, *layers.back()));
+            layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
+            //layers.emplace_back(new TanhLayer(*layers.back()));
+        }
+        Layer& tower_last = *layers.back();
+        layers.emplace_back(new ConvLayer(tower_last, { 2, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
+        layers.emplace_back(new BatchNormLayer(*layers.back()));
+        layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
+        layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
+        //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
+        Layer& policy_layer = *layers.back();
 
-        ConvLayer conv2_1(relu1, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 });
-        ConvLayer conv2_2(conv2_1, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 });
-        SELayer se2(conv2_2, kFilters);
-        LayerAdder add2(relu1, se2);
-        ReluLayer relu2(add2);
+        layers.emplace_back(new ConvLayer(tower_last, { 1, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
+        layers.emplace_back(new BatchNormLayer(*layers.back()));
+        layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
+        layers.emplace_back(new DenseLayer(*layers.back(), 1));
+        //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
+        Layer& value_layer = *layers.back();
 
-        ConvLayer conv_last(relu2, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 });
-        ConvLayer conv_last_2(conv_last, { 1, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 });
-        SigmoidLayer sigm(conv_last_2);
-
-        DenseLayer dense_value(relu2, 128);
-        DenseLayer dense_value_2(relu2, 1);
-        EltwiseLayer elt(dense_value_2, dnnl::algorithm::eltwise_tanh);
-
-        net.Build({ &sigm, &elt }, 1e-3);
+        net.Build({ &policy_layer, &value_layer }, 1e-3);
         return net;
     }
     NeuralStrategy(int strength = 100)
@@ -166,17 +179,41 @@ struct NeuralStrategy : Strategy
             train_net.Forward(s);
             train_net.Backward(s);
             s.wait();
+            //std::vector<float> tmp2;
+            //train_net.grad(0) >> tmp2;
+            //float max_value_2 = -123;
+            //for (int j = 0; j < tmp2.size(); j++)
+            //    max_value_2 = std::max(max_value_2, std::abs(tmp2[j]));
+            //std::cout << max_value_2 << "\n";
+            //for (int i = 0; i < train_net.weights.size(); i++)
+            //{
+            //    std::vector<float> tmp;
+            //    std::vector<float> tmp2;
+            //    train_net.weights[i] >> tmp;
+            //    net.weights[i] >> tmp2;
+            //    for (int j = 0; j < tmp.size(); j++)
+            //        max_value_2 = std::max(max_value_2, std::abs(tmp[j] - tmp2[j]));
+            //}
+            //std::cout << max_value_2 << "\n";
         }
+        //float max_value = -123;
         for (int i = 0; i < train_net.weights.size(); i++)
         {
             std::vector<float> tmp;
+            //std::vector<float> tmp2;
+            //net.weights[i] >> tmp2;
             //if (GetMemoryByteSize(train_net.weights[i]) != GetMemoryByteSize(net.weights[i]))
             //{
             //    std::cout << "EPIC FAIL\n";
             //}
             train_net.weights[i] >> tmp;
             net.weights[i] << tmp;
+
+            //assert(tmp.size() == tmp2.size());
+            //for (int j = 0; j < tmp.size(); j++)
+            //    max_value = std::max(max_value, std::abs(tmp[j] - tmp2[j]));
         }
+        //std::cout << max_value << "\n";
     }
     virtual void Randomize(int seed) override
     {
@@ -186,7 +223,7 @@ struct NeuralStrategy : Strategy
     virtual void MakeMove(Field& field, MoveStorage* storage = nullptr) override
     {
         MctsNode node;
-        Move move = Mcts(field, node, net, gen, 100);
+        Move move = Mcts(field, node, &net, gen, strength);
         // Save predictions
         if (storage)
         {
@@ -195,7 +232,7 @@ struct NeuralStrategy : Strategy
             MctsNode** cur_child = &node.child;
             for (MctsNode** cur_child = &node.child; *cur_child; cur_child = &(*cur_child)->sibling)
             {
-                p_v[field.ToY((*cur_child)->move) * field.width + field.ToX((*cur_child)->move)] = (*cur_child)->value;
+                p_v[field.ToY((*cur_child)->move) * field.width + field.ToX((*cur_child)->move)] = (*cur_child)->GetP();
             }
             storage->push({ i_v, p_v, node.value });
         }
@@ -216,7 +253,22 @@ struct MctsStrategy : Strategy
     }
     virtual void MakeMove(Field& field, MoveStorage* storage = nullptr) override
     {
-        field.MakeMove(Uct(field, gen, strength));
+        //field.MakeMove(Uct(field, gen, strength));
+        MctsNode node;
+        Move move = Mcts(field, node, nullptr, gen, strength);
+        // Save predictions
+        if (storage)
+        {
+            std::vector<float> i_v(6 * FIELD_HEIGHT * FIELD_WIDTH), p_v(FIELD_HEIGHT * FIELD_WIDTH, 1);
+            FieldToNNInput(field, i_v.data());
+            MctsNode** cur_child = &node.child;
+            for (MctsNode** cur_child = &node.child; *cur_child; cur_child = &(*cur_child)->sibling)
+            {
+                p_v[field.ToY((*cur_child)->move) * field.width + field.ToX((*cur_child)->move)] = (*cur_child)->GetP();
+            }
+            storage->push({ i_v, p_v, node.value });
+        }
+        field.MakeMove(move);
     }
 };
 

@@ -70,7 +70,8 @@ void operator>>(const dnnl::memory& mem, void* handle)
 {
     dnnl::engine eng = mem.get_engine();
     size_t size = GetMemoryByteSize(mem);
-
+    if (!size)
+        return;
     if (!handle)
         throw std::runtime_error("handle is nullptr.");
 
@@ -174,7 +175,9 @@ void NNetwork::Build(const std::vector<Layer*>& output, float learn_rate)
 
 void NNetwork::RandomWeights(std::mt19937& mt, float min, float max)
 {
+    //std::normal_distribution<float> dist(0, 1);
     std::uniform_real_distribution<float> dist(min, max);
+    //std::uniform_real_distribution<float> dist(-1e-5, 1e-5);
     for (memory& mem : weights)
     {
         std::vector<float> buffer(GetMemoryCount(mem));
@@ -209,13 +212,51 @@ void NNetwork::LoadWeights(const std::string& file)
 void NNetwork::Forward(const dnnl::stream& s)
 {
     for (auto& cur : fwd)
+    {
         cur.first.execute(s, cur.second);
+        //for (auto m : cur.second)
+        //{
+        //    std::vector<float> tmp;
+        //    m.second >> tmp;
+        //    for (int j = 0; j < tmp.size(); j++)
+        //        if (isnan(tmp[j]) || isinf(tmp[j]) || abs(tmp[j]) > 1e4)
+        //        {
+        //            exit(-777);
+        //        }
+        //    //float max_value = -123;
+        //    //for (int j = 0; j < tmp.size(); j++)
+        //    //    max_value = std::max(max_value, std::abs(tmp[j]));
+        //    //if (max_value > 10000)
+        //    //{
+        //    //    max_value += 0;
+        //    //}
+
+        //}
+    }
 }
 
 void NNetwork::Backward(const dnnl::stream& s)
 {
     for (auto& cur : bwd)
+    {
         cur.first.execute(s, cur.second);
+        //if (cur.second.count(DNNL_ARG_DIFF_WEIGHTS))
+        //{
+        //for (auto m : cur.second)
+        //{
+        //    std::vector<float> tmp;
+        //    m.second >> tmp;
+        //    //float max_value = -123;
+        //    for (int j = 0; j < tmp.size(); j++)
+        //        if (isnan(tmp[j]) || isinf(tmp[j]) || abs(tmp[j]) > 1e4)
+        //        {
+        //            exit(-666);
+        //        }
+        //        //max_value = std::max(max_value, std::abs(tmp[j]));
+        //    //max_value += 0;
+        //}
+        //}
+    }
 }
 
 InputLayer::InputLayer(NNetwork& net, const dnnl::memory::dims& adims) : InputLayer(net, {adims, net.data_type, GetStridesForDims(adims)})
@@ -397,7 +438,11 @@ ReluLayer::ReluLayer(Layer& input, float alpha) : EltwiseLayer(input, algorithm:
 {
 }
 
-SigmoidLayer::SigmoidLayer(Layer& input, float alpha) : EltwiseLayer(input, algorithm::eltwise_logistic)
+SigmoidLayer::SigmoidLayer(Layer& input) : EltwiseLayer(input, algorithm::eltwise_logistic)
+{
+}
+
+TanhLayer::TanhLayer(Layer& input) : EltwiseLayer(input, algorithm::eltwise_tanh)
 {
 }
 
@@ -823,4 +868,65 @@ void SELayer::Init()
     int channel_count = input.output_desc().dims()[1];
     dense1.output_size = inner_size;
     dense2.output_size = channel_count;
+}
+
+BatchNormLayer::BatchNormLayer(Layer& input, float eps) : Layer(input.net()), input(input), eps(eps)
+{
+    input.IncDependencies();
+}
+
+void BatchNormLayer::Init()
+{
+    NNetwork& net = this->net();
+    input.DecDependencies();
+    auto desc = input.output_desc();
+    auto c = desc.dims()[1];
+    auto arg_d = net.kind == prop_kind::forward_training
+        ? memory::desc({ c }, net.data_type, memory::format_tag::a)
+        : memory::desc();
+    auto mean_mem = memory(arg_d, net.engine);
+    auto var_mem = memory(arg_d, net.engine);
+
+    auto norm_pd = batch_normalization_forward::primitive_desc({ net.kind, desc, eps, normalization_flags::none }, net.engine);
+    auto norm_fwd = batch_normalization_forward(norm_pd);
+
+    output({ desc, net.engine });
+
+    net.fwd.push_back({ norm_fwd,
+    {
+        {DNNL_ARG_SRC, input.output()},
+        {DNNL_ARG_MEAN, mean_mem},
+        {DNNL_ARG_VARIANCE, var_mem},
+        {DNNL_ARG_DST, output()},
+    } });
+    // Backward
+    if (net.kind == dnnl::prop_kind::forward_training)
+    {
+        dst_grad({ desc, net.engine });
+        auto norm_bwd = batch_normalization_backward({ { prop_kind::backward_data, desc, desc, eps, normalization_flags::none }, net.engine, norm_pd });
+        auto reverse_from = net.bwd.size();
+        if (input.dst_grad())
+        {
+            net.bwd.push_back({ norm_bwd,
+            {
+                {DNNL_ARG_DIFF_SRC, !input.dependency_count() ? input.dst_grad() : input.dst_grad_2()},
+                {DNNL_ARG_SRC, input.output()},
+                {DNNL_ARG_MEAN, mean_mem},
+                {DNNL_ARG_VARIANCE, var_mem},
+                {DNNL_ARG_DIFF_DST, dst_grad()},
+            } });
+
+            if (input.dependency_count()) // grad saved to buffer, so should add to main memory
+            {
+                auto adder = binary({ {algorithm::binary_add, desc, desc, desc}, net.engine });
+                net.bwd.push_back({ adder,
+                {
+                    {DNNL_ARG_SRC_0, input.dst_grad()},
+                    {DNNL_ARG_SRC_1, input.dst_grad_2()},
+                    {DNNL_ARG_DST, input.dst_grad()},
+                } });
+            }
+        }
+        std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
+    }
 }

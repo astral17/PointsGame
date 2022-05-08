@@ -3,8 +3,8 @@
 #include "layers.h"
 #include <random>
 
-constexpr int FIELD_HEIGHT = 10;
-constexpr int FIELD_WIDTH = 10;
+constexpr int FIELD_HEIGHT = 5;
+constexpr int FIELD_WIDTH = 5;
 
 struct MctsNode
 {
@@ -18,7 +18,7 @@ struct MctsNode
     }
     float GetU(int total) const
     {
-        return sqrtf(2 * logf(total) / visits);
+        return sqrtf(0.5 * logf(total) / visits);
     }
     MctsNode() {}
     MctsNode(Move move, float value) : move(move), value(value) {}
@@ -38,7 +38,7 @@ struct Policy
         return policy[Field::ToY(move, width) * width + Field::ToX(move, width)];
     }
     size_t size() const { return policy.size(); }
-    Policy(int height, int width) : height(height), width(width), policy(height * width) {}
+    Policy(int height, int width) : height(height), width(width), policy(height * width, 1) {}
 };
 
 struct Prediction
@@ -74,8 +74,6 @@ void FieldToNNInput(Field& field, void *input_)
         }
 }
 
-#define ORDER_BY_SCORE
-
 float MctsRandomGame(Field& field, mt19937& gen, MoveList moves)
 {
     Player player = field.GetPlayer();
@@ -97,7 +95,7 @@ float MctsRandomGame(Field& field, mt19937& gen, MoveList moves)
     return result;
 }
 
-Prediction Predict(Field& field, NNetwork& net, std::mt19937& gen)
+Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
 {
     Prediction result(field.height, field.width);
     //std::uniform_real_distribution<float> dist(-1, 1);
@@ -105,49 +103,58 @@ Prediction Predict(Field& field, NNetwork& net, std::mt19937& gen)
     //for (int i = 0; i < result.policy.size(); i++)
     //    result.policy[i] = dist(gen);
     
-    void* input = MemoryMapData(net.input);
-    FieldToNNInput(field, input);
-    MemoryUnmapData(net.input, input);
-    dnnl::stream s(net.engine);
-    net.Forward(s);
-    s.wait();
-    net.output(0) >> result.policy.policy;
-    //if (isnan(result.policy.policy[0]))
-    //{
-    //    for (int i = 0; i < net.weights.size(); i++)
-    //    {
-    //        vector<float> tmp;
-    //        net.weights[i] >> tmp;
-    //        std::cout << "hmm";
-    //    }
-    //}
-    std::vector<float> value;
-    net.output(1) >> value;
-    result.value = value[0];
-    
-    //MoveList moves = field.GetAllMoves();
-    //result.value = MctsRandomGame(field, gen, moves);
-    //for (Move move : moves)
-    //{
-    //    field.MakeMove(move);
-    //    result.policy[move] = MctsRandomGame(field, gen, moves);
-    //    field.Undo();
-    //}
-
+    if (net)
+    {
+        void* input = MemoryMapData(net->input);
+        FieldToNNInput(field, input);
+        MemoryUnmapData(net->input, input);
+        dnnl::stream s(net->engine);
+        net->Forward(s);
+        s.wait();
+        net->output(0) >> result.policy.policy;
+        if (isnan(result.policy.policy[0]))
+        {
+            for (int i = 0; i < net->weights.size(); i++)
+            {
+                vector<float> tmp;
+                net->weights[i] >> tmp;
+                std::cout << "hmm";
+            }
+        }
+        std::vector<float> value;
+        net->output(1) >> value;
+        result.value = value[0];
+    }
+    else
+    {
+        MoveList moves = field.GetAllMoves();
+        result.value = MctsRandomGame(field, gen, moves);
+        std::uniform_real_distribution<float> dist(0, 1e-4);
+        for (Move move : moves)
+        {
+            result.policy[move] = -1 + dist(gen);
+        //    field.MakeMove(move);
+        //    result.policy[move] = MctsRandomGame(field, gen, moves);
+        //    field.Undo();
+        }
+    }
     
     return result;
 }
 
 // Return score for field current player
-float MctsSearch(Field& field, MctsNode* node, NNetwork& net, std::mt19937& gen)
+float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
 {
     if (!node->child)
     {
         // Leaf, Finish state
         if (field.GetAllMoves().empty())
         {
-            node->visits = std::numeric_limits<int>::max();
-            return node->value = std::max(-1.f, std::min(1.f, field.GetScore(field.GetPlayer()) / 10.f));
+            node->visits++; // std::numeric_limits<int>::max();
+            //float score = std::max(-1.f, std::min(1.f, field.GetScore(field.GetPlayer()) / 10.f));
+            float score = std::max(-1, std::min(1, field.GetScore(field.GetPlayer())));
+            node->value = score * node->visits;
+            return score;
         }
         // Leaf, Expand
         Prediction prediction = Predict(field, net, gen);
@@ -177,6 +184,11 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork& net, std::mt19937& gen)
         }
     }
     // Go to best child
+    if (!best)
+    {
+        std::cerr << "Mcts don't found any moves!\n";
+        exit(-123);
+    }
     field.MakeMove(best->move);
     float result = -MctsSearch(field, best, net, gen);
     // Backpropogation
@@ -186,7 +198,7 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork& net, std::mt19937& gen)
     return result;
 }
 
-Move Mcts(Field& field, MctsNode& root, NNetwork& net, std::mt19937& gen, int simulations)
+Move Mcts(Field& field, MctsNode& root, NNetwork* net, std::mt19937& gen, int simulations)
 {
     for (int i = 0; i < simulations; i++)
         MctsSearch(field, &root, net, gen);
@@ -207,7 +219,7 @@ Move Mcts(Field& field, MctsNode& root, NNetwork& net, std::mt19937& gen, int si
     return best ? best->move : -1;
 }
 
-Move Mcts(Field& field, NNetwork& net, std::mt19937& gen, int simulations)
+Move Mcts(Field& field, NNetwork* net, std::mt19937& gen, int simulations)
 {
     MctsNode root;
     return Mcts(field, root, net, gen, simulations);

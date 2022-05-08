@@ -157,7 +157,12 @@ public:
 struct SigmoidLayer : EltwiseLayer
 {
 public:
-    SigmoidLayer(Layer& input, float alpha = 0);
+    SigmoidLayer(Layer& input);
+};
+struct TanhLayer : EltwiseLayer
+{
+public:
+    TanhLayer(Layer& input);
 };
 
 struct LayerAdder : Layer
@@ -290,5 +295,14 @@ public:
     virtual int dependency_count() const override { return mul.dependency_count(); }
     virtual int dependency_count(int count) override { return mul.dependency_count(count); }
 
+    virtual void Init() override;
+};
+
+struct BatchNormLayer : Layer
+{
+    Layer& input;
+    float eps;
+public:
+    BatchNormLayer(Layer& input, float eps = 1e-3);
     virtual void Init() override;
 };
