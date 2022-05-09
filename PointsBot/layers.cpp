@@ -136,11 +136,15 @@ Layer::Layer(NNetwork& net) : net_(&net)
     net.layers.push_back(this);
 }
 
+Loss::Loss(NNetwork& net) : net_(&net)
+{
+}
+
 NNetwork::NNetwork(const dnnl::engine& eng, dnnl::prop_kind kind, dnnl::memory::data_type data_type) : engine(eng), kind(kind), data_type(data_type)
 {
 }
 
-void NNetwork::Build(const std::vector<Layer*>& output, float learn_rate)
+void NNetwork::Build(const std::vector<Layer*>& output, float learn_rate, const std::vector<Loss*>& loss)
 {
     this->learn_rate = learn_rate;
     if (kind == prop_kind::forward_training)
@@ -151,22 +155,18 @@ void NNetwork::Build(const std::vector<Layer*>& output, float learn_rate)
     for (auto layer : layers)
         layer->Init();
     auto reverse_from = bwd.size();
-    for (Layer* layer : output)
+    for (int i = 0; i < output.size(); i++)
     {
+        Layer* layer = output[i];
         auto desc = layer->output_desc();
         outputs.push_back(layer->output());
         answers.push_back(memory(desc, engine));
         if (kind == prop_kind::forward_training)
         {
+            Loss* cur_loss = loss[i];
             layer->DecDependencies();
-            auto subber = binary({ {algorithm::binary_sub, desc, desc, desc}, engine });
             grads.push_back(layer->dst_grad());
-            bwd.push_back({ subber,
-            {
-                {DNNL_ARG_SRC_0, outputs.back()},
-                {DNNL_ARG_SRC_1, answers.back()},
-                {DNNL_ARG_DST, grads.back()},
-            } });
+            cur_loss->Init(outputs.back(), answers.back(), grads.back());
         }
     }
     std::reverse(bwd.begin() + reverse_from, bwd.end());
@@ -929,4 +929,53 @@ void BatchNormLayer::Init()
         }
         std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
     }
+}
+
+MeanSquaredLoss::MeanSquaredLoss(NNetwork& net) : Loss(net)
+{
+}
+
+void MeanSquaredLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad)
+{
+    auto desc = answer.get_desc();
+    auto subber = binary({ {algorithm::binary_sub, desc, desc, desc}, net().engine });
+    net().bwd.push_back({ subber,
+    {
+        {DNNL_ARG_SRC_0, output},
+        {DNNL_ARG_SRC_1, answer},
+        {DNNL_ARG_DST, grad},
+    } });
+}
+
+CrossEntropyLoss::CrossEntropyLoss(NNetwork& net) : Loss(net)
+{
+}
+
+void CrossEntropyLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad)
+{
+    auto desc = answer.get_desc();
+    //auto dims = memory::dims(desc.dims().size(), 1);
+    //auto eps_mem = memory::desc(dims, net().data_type, GetStridesForDims(dims));
+    //auto add_p = binary({ {algorithm::binary_add, desc, desc, desc}, net().engine });
+    auto clip_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_clip, desc, 1e-9, 1}, net().engine });
+    auto log_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_log, desc}, net().engine });
+    auto mul_p = binary({ {algorithm::binary_mul, desc, desc, desc}, net().engine });
+    net().bwd.push_back({ clip_p,
+    {
+        {DNNL_ARG_SRC, output},
+        {DNNL_ARG_DST, grad},
+    } });
+    
+    net().bwd.push_back({ log_p,
+    {
+        {DNNL_ARG_SRC, grad},
+        {DNNL_ARG_DST, grad},
+    } });
+
+    net().bwd.push_back({ mul_p,
+    {
+        {DNNL_ARG_SRC_0, grad},
+        {DNNL_ARG_SRC_1, answer},
+        {DNNL_ARG_DST, grad},
+    } });
 }

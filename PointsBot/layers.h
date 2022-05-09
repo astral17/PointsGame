@@ -78,6 +78,15 @@ public:
     virtual void Init() = 0;
 };
 
+class Loss
+{
+    NNetwork* net_ = nullptr;
+public:
+    NNetwork& net() const { return *net_; }
+    Loss(NNetwork& net);
+    virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad) = 0;
+};
+
 struct NNetwork
 {
 public:
@@ -98,7 +107,7 @@ public:
     NNetwork(const dnnl::engine& eng, dnnl::prop_kind kind = dnnl::prop_kind::forward_training, dnnl::memory::data_type data_type = dnnl::memory::data_type::f32);
     
     // Set loss function, optimizer, prepare forward and backward list
-    void Build(const std::vector<Layer*>& output, float learn_rate);
+    void Build(const std::vector<Layer*>& output, float learn_rate, const std::vector<Loss*>& loss = {});
     void RandomWeights(std::mt19937 &mt, float min = -1, float max = 1);
     void SaveWeights(const std::string &file);
     void LoadWeights(const std::string& file);
@@ -305,4 +314,16 @@ struct BatchNormLayer : Layer
 public:
     BatchNormLayer(Layer& input, float eps = 1e-3);
     virtual void Init() override;
+};
+
+struct MeanSquaredLoss : Loss
+{
+    MeanSquaredLoss(NNetwork& net);
+    virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad);
+};
+
+struct CrossEntropyLoss : Loss
+{
+    CrossEntropyLoss(NNetwork& net);
+    virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad);
 };

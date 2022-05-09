@@ -6,22 +6,27 @@
 constexpr int FIELD_HEIGHT = 5;
 constexpr int FIELD_WIDTH = 5;
 
+constexpr float kUct = 1;
+
 struct MctsNode
 {
     MctsNode* sibling = nullptr, * child = nullptr;
     float value = 0;
-    int visits = 1;
+    int visits = 0;
+    float prior_prob = 0;
     Move move = -1;
-    float GetP() const
+    // Mean action value
+    float GetQ() const
     {
-        return value / visits;
+        return value / std::max(1, visits);
     }
+    float GetP() const { return prior_prob; }
     float GetU(int total) const
     {
-        return sqrtf(0.5 * logf(total) / visits);
+        return kUct * prior_prob * sqrtf(total) / (1 + visits);
     }
     MctsNode() {}
-    MctsNode(Move move, float value) : move(move), value(value) {}
+    MctsNode(Move move, float prior_prob) : move(move), prior_prob(prior_prob) {}
     ~MctsNode()
     {
         delete sibling;
@@ -32,13 +37,13 @@ struct MctsNode
 struct Policy
 {
     std::vector<float> policy;
-    int height, width;
+    short height, width;
     float& operator[](Move move)
     {
         return policy[Field::ToY(move, width) * width + Field::ToX(move, width)];
     }
     size_t size() const { return policy.size(); }
-    Policy(int height, int width) : height(height), width(width), policy(height * width, 1) {}
+    Policy(short height, short width) : height(height), width(width), policy(height * width, 0) {}
 };
 
 struct Prediction
@@ -87,7 +92,8 @@ float MctsRandomGame(Field& field, mt19937& gen, MoveList moves)
             putted++;
         }
 
-    result = std::max(-1.f, std::min(1.f, field.GetScore(player) / 10.f));
+    //result = std::max(-1.f, std::min(1.f, field.GetScore(player) / 10.f));
+    result = std::max(-1, std::min(1, field.GetScore(player)));
 
     for (size_t i = 0; i < putted; i++)
         field.Undo();
@@ -102,7 +108,6 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
     //result.value = dist(gen);
     //for (int i = 0; i < result.policy.size(); i++)
     //    result.policy[i] = dist(gen);
-    
     if (net)
     {
         void* input = MemoryMapData(net->input);
@@ -112,15 +117,15 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
         net->Forward(s);
         s.wait();
         net->output(0) >> result.policy.policy;
-        if (isnan(result.policy.policy[0]))
-        {
-            for (int i = 0; i < net->weights.size(); i++)
-            {
-                vector<float> tmp;
-                net->weights[i] >> tmp;
-                std::cout << "hmm";
-            }
-        }
+        //if (isnan(result.policy.policy[0]))
+        //{
+        //    for (int i = 0; i < net->weights.size(); i++)
+        //    {
+        //        vector<float> tmp;
+        //        net->weights[i] >> tmp;
+        //        std::cout << "hmm";
+        //    }
+        //}
         std::vector<float> value;
         net->output(1) >> value;
         result.value = value[0];
@@ -129,10 +134,9 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
     {
         MoveList moves = field.GetAllMoves();
         result.value = MctsRandomGame(field, gen, moves);
-        std::uniform_real_distribution<float> dist(0, 1e-4);
         for (Move move : moves)
         {
-            result.policy[move] = -1 + dist(gen);
+            result.policy[move] = 1.f / moves.size();
         //    field.MakeMove(move);
         //    result.policy[move] = MctsRandomGame(field, gen, moves);
         //    field.Undo();
@@ -160,6 +164,9 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
         Prediction prediction = Predict(field, net, gen);
         MctsNode** cur_child = &node->child;
         MoveList moves = field.GetAllMoves();
+        std::uniform_real_distribution<float> dist(0, 0.03);
+        for (Move move : moves)
+            prediction.policy[move] += dist(gen);
         shuffle(moves.begin(), moves.end(), gen);
         for (Move move : moves)
         {
@@ -175,8 +182,8 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
     float best_score = std::numeric_limits<float>::max();
     for (MctsNode** cur_child = &node->child; *cur_child; cur_child = &(*cur_child)->sibling)
     {
-        // Select best child (min value because policy for enemy after move)
-        float score = (*cur_child)->GetP() - (*cur_child)->GetU(node->visits);
+        // Select best child (min value because value for enemy after move)
+        float score = (*cur_child)->GetQ() - (*cur_child)->GetU(node->visits);
         if (score < best_score)
         {
             best_score = score;
@@ -198,29 +205,51 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
     return result;
 }
 
-Move Mcts(Field& field, MctsNode& root, NNetwork* net, std::mt19937& gen, int simulations)
+Move Mcts(Field& field, MctsNode& root, NNetwork* net, std::mt19937& gen, int simulations, bool train = false)
 {
     for (int i = 0; i < simulations; i++)
         MctsSearch(field, &root, net, gen);
 
     MctsNode* best = nullptr;
-    float best_score = std::numeric_limits<float>::max();
-    for (MctsNode** cur_child = &root.child; *cur_child; cur_child = &(*cur_child)->sibling)
+    if (!train)
     {
-        // Select best child (min value because policy for enemy after move)
-        float score = (*cur_child)->GetP();// -(*cur_child)->GetU(root.visits);
-        //std::cout << field.ToX((*cur_child)->move) << " " << field.ToY((*cur_child)->move) << " " << score << "\n";
-        if (score < best_score)
+        float best_score = -1;
+        uniform_real_distribution<float> dist(0, 0.1);
+        for (MctsNode** cur_child = &root.child; *cur_child; cur_child = &(*cur_child)->sibling)
         {
-            best_score = score;
-            best = *cur_child;
+            float score = (*cur_child)->visits + dist(gen);
+            //std::cout << field.ToX((*cur_child)->move) << " " << field.ToY((*cur_child)->move) << " " << score << "\n";
+            if (score > best_score)
+            {
+                best_score = score;
+                best = *cur_child;
+            }
+        }
+    }
+    else
+    {
+        float t = 1.f / 1;
+        uniform_real_distribution<float> dist(0, 1 - 1e-6);
+        float x = dist(gen);
+        float cur = 0;
+        float sum = 0;
+        for (MctsNode** cur_child = &root.child; *cur_child; cur_child = &(*cur_child)->sibling)
+            sum += std::powf((*cur_child)->visits, t);
+        for (MctsNode** cur_child = &root.child; *cur_child; cur_child = &(*cur_child)->sibling)
+        {
+            cur += std::powf((*cur_child)->visits, t) / sum;
+            if (cur >= x)
+            {
+                best = *cur_child;
+                break;
+            }
         }
     }
     return best ? best->move : -1;
 }
 
-Move Mcts(Field& field, NNetwork* net, std::mt19937& gen, int simulations)
+Move Mcts(Field& field, NNetwork* net, std::mt19937& gen, int simulations, bool train = false)
 {
     MctsNode root;
-    return Mcts(field, root, net, gen, simulations);
+    return Mcts(field, root, net, gen, simulations, train);
 }
