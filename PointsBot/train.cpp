@@ -86,6 +86,22 @@ void Trainer()
     //        }
     //        std::cout << "\n";
     //    }
+    //    NNetwork& net = ((NeuralStrategy*)best_strategy.strategy_.get())->net;
+    //    net.input << s_input;
+    //    dnnl::stream st(net.engine);
+    //    net.Forward(st);
+    //    std::vector<float> tmp;
+    //    net.output(0) >> tmp;
+    //    float(*o_policy)[FIELD_WIDTH] = (float(*)[FIELD_WIDTH])tmp.data();
+    //    for (int i = 4; i >= 0; i--)
+    //    {
+    //        for (int j = 0; j < 5; j++)
+    //            std::cout << o_policy[i][j] << " ";
+    //        std::cout << "\n";
+    //    }
+    //    net.output(1) >> tmp;
+    //    std::cout << tmp[0] << "\n";
+
     //    float(*s_policy)[FIELD_WIDTH] = (float(*)[FIELD_WIDTH])s.policy.data();
     //    for (int i = 4; i >= 0; i--)
     //    {
@@ -97,7 +113,6 @@ void Trainer()
     //    std::cout << s.value << "\n";
     //    std::getchar();
     //}
-    //
     //return;
     //for (int i = 0; i < 100; i++)
     //    //    //PvP(best_strategy.strategy(), best_strategy.strategy(), gen() & 1, &storage);

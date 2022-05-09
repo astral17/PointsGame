@@ -316,6 +316,15 @@ public:
     virtual void Init() override;
 };
 
+struct SoftMaxLayer : Layer
+{
+    Layer& input;
+    int axis;
+public:
+    SoftMaxLayer(Layer& input, int axis = -1);
+    virtual void Init() override;
+};
+
 struct MeanSquaredLoss : Loss
 {
     MeanSquaredLoss(NNetwork& net);

@@ -85,12 +85,12 @@ struct NeuralStrategy : Strategy
         DenseLayer dense(in, 12 * FIELD_HEIGHT * FIELD_WIDTH);
         ReluLayer relu(dense);
         DenseLayer dense_policy(relu, FIELD_HEIGHT * FIELD_WIDTH);
-        SigmoidLayer sigm(dense_policy);
+        SoftMaxLayer soft(dense_policy);
         DenseLayer dense_value(relu, 1);
         TanhLayer tanh(dense_value);
         CrossEntropyLoss loss_policy(net);
         MeanSquaredLoss loss_value(net);
-        net.Build({ &sigm, &tanh }, 0.1, { &loss_policy, &loss_value});
+        net.Build({ &soft, &tanh }, 0.1, { &loss_policy, &loss_value});
 
         //constexpr int kFilters = 16;
         //vector<unique_ptr<Layer>> layers;
