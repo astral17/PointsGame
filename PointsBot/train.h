@@ -92,45 +92,41 @@ struct NeuralStrategy : Strategy
         MeanSquaredLoss loss_value(net);
         net.Build({ &soft, &tanh }, 0.1, { &loss_policy, &loss_value});
 
-        //constexpr int kFilters = 16;
+        //constexpr int kFilters = 32;
         //vector<unique_ptr<Layer>> layers;
         //layers.emplace_back(new InputLayer(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH }));
         //layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, 6, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
         //layers.emplace_back(new BatchNormLayer(*layers.back()));
-        ////layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
 
-        //for (int i = 0; i < 8; i++)
+        //for (int i = 0; i < 4; i++)
         //{
         //    Layer& residual = *layers.back();
         //    layers.emplace_back(new ConvLayer(residual, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        //    //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
         //    layers.emplace_back(new BatchNormLayer(*layers.back()));
         //    layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        //    //layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
         //    layers.emplace_back(new BatchNormLayer(*layers.back()));
         //    layers.emplace_back(new SELayer(*layers.back(), kFilters));
         //    layers.emplace_back(new LayerAdder(residual, *layers.back()));
         //    layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
-        //    //layers.emplace_back(new TanhLayer(*layers.back()));
         //}
         //Layer& tower_last = *layers.back();
         //layers.emplace_back(new ConvLayer(tower_last, { 2, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        ////layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
         //layers.emplace_back(new BatchNormLayer(*layers.back()));
         //layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
         //layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
-        ////layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
+        //layers.emplace_back(new SoftMaxLayer(*layers.back()));
         //Layer& policy_layer = *layers.back();
 
         //layers.emplace_back(new ConvLayer(tower_last, { 1, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        ////layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
         //layers.emplace_back(new BatchNormLayer(*layers.back()));
         //layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
         //layers.emplace_back(new DenseLayer(*layers.back(), 1));
-        ////layers.emplace_back(new TanhLayer(*layers.back())); // TODO: del
+        //layers.emplace_back(new TanhLayer(*layers.back()));
         //Layer& value_layer = *layers.back();
 
-        //net.Build({ &policy_layer, &value_layer }, 1e-3);
+        //CrossEntropyLoss loss_policy(net);
+        //MeanSquaredLoss loss_value(net);
+        //net.Build({ &policy_layer, &value_layer }, 1e-3, { &loss_policy, &loss_value });
         return net;
     }
     NeuralStrategy(int strength = 100)

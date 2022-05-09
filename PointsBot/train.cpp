@@ -18,7 +18,7 @@ bool PvP(Strategy& a, Strategy& b, Player first, MoveStorage* storage, bool trai
     }
     if (storage)
     {
-        float score = field.GetScore(first);
+        float score = field.GetScore(kPlayerRed);
         if (score > 0)
             score = 1;
         if (score < 0)
@@ -53,8 +53,8 @@ void Trainer()
     //std::mt19937 gen(1351925);
     std::mt19937 gen(time(0));
     train_strategy.strategy().Randomize(gen());
-    best_strategy.strategy().Randomize(gen());
-    //((NeuralStrategy*)best_strategy.strategy_.get())->net.LoadWeights("weights_last.bwf");
+    //best_strategy.strategy().Randomize(gen());
+    ((NeuralStrategy*)best_strategy.strategy_.get())->net.LoadWeights("weights_last.bwf");
     //((NeuralStrategy*)cur_strategy.strategy_.get())->net.LoadWeights("dense_only/weights_5216_1.bwf");
 
     //StrategyContainer rnd_strategy(new RandomStrategy());
@@ -101,7 +101,6 @@ void Trainer()
     //    }
     //    net.output(1) >> tmp;
     //    std::cout << tmp[0] << "\n";
-
     //    float(*s_policy)[FIELD_WIDTH] = (float(*)[FIELD_WIDTH])s.policy.data();
     //    for (int i = 4; i >= 0; i--)
     //    {
@@ -143,11 +142,11 @@ void Trainer()
         //else
         //    std::cout << "loser:  ";
         //std::cout << wins << "/" << total << "\n";
-        for (int i = 0; i < 100; i++)
+        for (int i = 0; i < 50; i++)
         {
-            //PvP(best_strategy.strategy(), best_strategy.strategy(), gen() & 1, &storage);
-            PvP(train_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
-            //PvP(best_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
+            PvP(best_strategy.strategy(), best_strategy.strategy(), gen() & 1, &storage, true);
+            //PvP(train_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
+            PvP(best_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
             // bestNet vs bestNet
             // save moves to storage
         }
