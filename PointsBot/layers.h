@@ -113,6 +113,7 @@ public:
     void LoadWeights(const std::string& file);
     void Forward(const dnnl::stream& s);
     void Backward(const dnnl::stream& s);
+    //float GetLoss(const dnnl::stream& s);
     dnnl::memory input;
     std::vector<dnnl::memory> outputs;
     std::vector<dnnl::memory> grads;

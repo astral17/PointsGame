@@ -27,12 +27,17 @@ public:
     inline MoveRecord& operator[](const int i) const { return q[i]; }
     inline void clear() { size = r = 0; }
     inline bool empty() const { return size == 0; }
-    inline void push(const MoveRecord& x)
+    inline void next()
     {
-        q[r++] = x;
+        r++;
         size = std::max(size, r);
         if (r >= capacity)
             r = 0;
+    }
+    inline void push(const MoveRecord& x)
+    {
+        q[r] = x;
+        next();
     }
 public:
     std::unique_ptr<MoveRecord[]> q;
@@ -72,7 +77,7 @@ struct StrategyContainer
 
 struct NeuralStrategy : Strategy
 {
-    const int batch_size = 64;
+    const int batch_size = 128;
     static dnnl::engine eng;
     NNetwork train_net, net;
     std::mt19937 gen;
@@ -81,52 +86,52 @@ struct NeuralStrategy : Strategy
     NNetwork Build(const dnnl::engine& eng, dnnl::prop_kind kind, int batch)
     {
         NNetwork net(eng, kind);
-        InputLayer in(net, { batch, 6 * FIELD_HEIGHT * FIELD_WIDTH });
-        DenseLayer dense(in, 12 * FIELD_HEIGHT * FIELD_WIDTH);
-        ReluLayer relu(dense);
-        DenseLayer dense_policy(relu, FIELD_HEIGHT * FIELD_WIDTH);
-        SoftMaxLayer soft(dense_policy);
-        DenseLayer dense_value(relu, 1);
-        TanhLayer tanh(dense_value);
-        CrossEntropyLoss loss_policy(net);
-        MeanSquaredLoss loss_value(net);
-        net.Build({ &soft, &tanh }, 0.1, { &loss_policy, &loss_value});
-
-        //constexpr int kFilters = 32;
-        //vector<unique_ptr<Layer>> layers;
-        //layers.emplace_back(new InputLayer(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH }));
-        //layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, 6, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        //layers.emplace_back(new BatchNormLayer(*layers.back()));
-
-        //for (int i = 0; i < 4; i++)
-        //{
-        //    Layer& residual = *layers.back();
-        //    layers.emplace_back(new ConvLayer(residual, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        //    layers.emplace_back(new BatchNormLayer(*layers.back()));
-        //    layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        //    layers.emplace_back(new BatchNormLayer(*layers.back()));
-        //    layers.emplace_back(new SELayer(*layers.back(), kFilters));
-        //    layers.emplace_back(new LayerAdder(residual, *layers.back()));
-        //    layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
-        //}
-        //Layer& tower_last = *layers.back();
-        //layers.emplace_back(new ConvLayer(tower_last, { 2, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        //layers.emplace_back(new BatchNormLayer(*layers.back()));
-        //layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
-        //layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
-        //layers.emplace_back(new SoftMaxLayer(*layers.back()));
-        //Layer& policy_layer = *layers.back();
-
-        //layers.emplace_back(new ConvLayer(tower_last, { 1, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        //layers.emplace_back(new BatchNormLayer(*layers.back()));
-        //layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
-        //layers.emplace_back(new DenseLayer(*layers.back(), 1));
-        //layers.emplace_back(new TanhLayer(*layers.back()));
-        //Layer& value_layer = *layers.back();
-
+        //InputLayer in(net, { batch, 6 * FIELD_HEIGHT * FIELD_WIDTH });
+        //DenseLayer dense(in, 12 * FIELD_HEIGHT * FIELD_WIDTH);
+        //ReluLayer relu(dense);
+        //DenseLayer dense_policy(relu, FIELD_HEIGHT * FIELD_WIDTH);
+        //SoftMaxLayer soft(dense_policy);
+        //DenseLayer dense_value(relu, 1);
+        //TanhLayer tanh(dense_value);
         //CrossEntropyLoss loss_policy(net);
         //MeanSquaredLoss loss_value(net);
-        //net.Build({ &policy_layer, &value_layer }, 1e-3, { &loss_policy, &loss_value });
+        //net.Build({ &soft, &tanh }, 0.1, { &loss_policy, &loss_value});
+
+        constexpr int kFilters = 32;
+        std::vector<std::unique_ptr<Layer>> layers;
+        layers.emplace_back(new InputLayer(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH }));
+        layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, 6, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        layers.emplace_back(new BatchNormLayer(*layers.back()));
+
+        for (int i = 0; i < 4; i++)
+        {
+            Layer& residual = *layers.back();
+            layers.emplace_back(new ConvLayer(residual, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+            layers.emplace_back(new BatchNormLayer(*layers.back()));
+            layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+            layers.emplace_back(new BatchNormLayer(*layers.back()));
+            layers.emplace_back(new SELayer(*layers.back(), kFilters));
+            layers.emplace_back(new LayerAdder(residual, *layers.back()));
+            layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
+        }
+        Layer& tower_last = *layers.back();
+        layers.emplace_back(new ConvLayer(tower_last, { 2, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        layers.emplace_back(new BatchNormLayer(*layers.back()));
+        layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
+        layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
+        layers.emplace_back(new SoftMaxLayer(*layers.back()));
+        Layer& policy_layer = *layers.back();
+
+        layers.emplace_back(new ConvLayer(tower_last, { 1, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        layers.emplace_back(new BatchNormLayer(*layers.back()));
+        layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
+        layers.emplace_back(new DenseLayer(*layers.back(), 1));
+        layers.emplace_back(new TanhLayer(*layers.back()));
+        Layer& value_layer = *layers.back();
+
+        CrossEntropyLoss loss_policy(net);
+        MeanSquaredLoss loss_value(net);
+        net.Build({ &policy_layer, &value_layer }, 0.01, { &loss_policy, &loss_value });
         return net;
     }
     NeuralStrategy(int strength = 100)
@@ -238,8 +243,6 @@ struct NeuralStrategy : Strategy
         field.MakeMove(move);
     }
 };
-
-dnnl::engine NeuralStrategy::eng(dnnl::engine::kind::cpu, 0);
 
 struct MctsStrategy : Strategy
 {

@@ -54,7 +54,7 @@ void MemoryUnmapData(const dnnl::memory& mem, void* handle)
 #if DNNL_GPU_RUNTIME == DNNL_RUNTIME_OCL
         if (eng.get_kind() == dnnl::engine::kind::gpu)
         {
-            mem.unmap_data(mapped_ptr);
+            mem.unmap_data(handle);
             return;
         }
 #endif
@@ -258,6 +258,11 @@ void NNetwork::Backward(const dnnl::stream& s)
         //}
     }
 }
+
+//float NNetwork::GetLoss(const dnnl::stream& s)
+//{
+//    return 123;
+//}
 
 InputLayer::InputLayer(NNetwork& net, const dnnl::memory::dims& adims) : InputLayer(net, {adims, net.data_type, GetStridesForDims(adims)})
 {

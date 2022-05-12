@@ -79,7 +79,7 @@ void FieldToNNInput(Field& field, void *input_)
         }
 }
 
-float MctsRandomGame(Field& field, mt19937& gen, MoveList moves)
+float MctsRandomGame(Field& field, std::mt19937& gen, MoveList moves)
 {
     Player player = field.GetPlayer();
     size_t putted = 0;
@@ -214,7 +214,7 @@ Move Mcts(Field& field, MctsNode& root, NNetwork* net, std::mt19937& gen, int si
     if (!train)
     {
         float best_score = -1;
-        uniform_real_distribution<float> dist(0, 0.1);
+        std::uniform_real_distribution<float> dist(0, 0.1);
         for (MctsNode** cur_child = &root.child; *cur_child; cur_child = &(*cur_child)->sibling)
         {
             float score = (*cur_child)->visits + dist(gen);
@@ -229,7 +229,7 @@ Move Mcts(Field& field, MctsNode& root, NNetwork* net, std::mt19937& gen, int si
     else
     {
         float t = 1.f / 1;
-        uniform_real_distribution<float> dist(0, 1 - 1e-6);
+        std::uniform_real_distribution<float> dist(0, 1 - 1e-6);
         float x = dist(gen);
         float cur = 0;
         float sum = 0;
