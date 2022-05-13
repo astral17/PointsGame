@@ -1,8 +1,6 @@
 #include "train.h"
 #include "mcts.h"
 
-dnnl::engine NeuralStrategy::eng(dnnl::engine::kind::cpu, 0);
-
 void RightRotateTo(const MoveRecord& src, MoveRecord& dst)
 {
     dst.value = src.value;
@@ -73,14 +71,23 @@ bool PvP(Strategy& a, Strategy& b, Player first, MoveStorage* storage, bool trai
     if (first != kPlayerRed)
         std::swap(cur_player, next_player);
     Field field(FIELD_HEIGHT, FIELD_WIDTH);
+    // cross in center
+    field.MakeMove(field.ToMove(FIELD_HEIGHT / 2 - 1, FIELD_WIDTH / 2 - 1));
+    field.MakeMove(field.ToMove(FIELD_HEIGHT / 2, FIELD_WIDTH / 2 - 1));
+    field.MakeMove(field.ToMove(FIELD_HEIGHT / 2, FIELD_WIDTH / 2));
+    field.MakeMove(field.ToMove(FIELD_HEIGHT / 2 - 1, FIELD_WIDTH / 2));
     std::vector<int> pos[2];
+    int last = -1;
     while (!field.GetAllMoves().empty())
     {
         if (storage)
-            pos[field.GetPlayer()].push_back(storage->r);
+            last = storage->r;
         cur_player->MakeMove(field, storage, train);
-        if (storage)
+        if (storage && last != storage->r)
+        {
+            pos[field.GetNextPlayer()].push_back(last);
             AugmentLast(storage, pos[field.GetNextPlayer()]);
+        }
         std::swap(cur_player, next_player);
     }
     if (storage)
@@ -107,21 +114,27 @@ void Trainer()
     // 
 
     //StrategyContainer best_strategy(new MctsStrategy(10));
-    StrategyContainer test_strategy(new MctsStrategy(100));
+    StrategyContainer test_strategy(new MctsStrategy(200));
     //StrategyContainer test_strategy(new NeuralStrategy(500));
     //StrategyContainer test_strategy(new RandomStrategy());
     StrategyContainer train_strategy(new MctsStrategy(10000));
-    StrategyContainer best_strategy(new NeuralStrategy(100));
+    StrategyContainer best_strategy(new NeuralStrategy(200));
     //StrategyContainer best_strategy(new RandomStrategy());
     //StrategyContainer cur_strategy(new NeuralStrategy(100));
 
-    MoveStorage storage(FIELD_HEIGHT * FIELD_WIDTH * 50 * 8 * 4);
+    MoveStorage storage((FIELD_HEIGHT * FIELD_WIDTH - 4) * 50 * 8 * 4);
     //std::mt19937 gen(1351925);
     std::mt19937 gen(time(0));
+    test_strategy.strategy().Randomize(gen());
     train_strategy.strategy().Randomize(gen());
     //best_strategy.strategy().Randomize(gen());
     ((NeuralStrategy*)best_strategy.strategy_.get())->net.LoadWeights("weights_last.bwf");
     //((NeuralStrategy*)cur_strategy.strategy_.get())->net.LoadWeights("weights_last_cnn_1.bwf");
+
+    //StrategyContainer human_strategy(new HumanStrategy());
+    ////PvP(best_strategy.strategy(), human_strategy.strategy(), gen() & 1);
+    //PvP(train_strategy.strategy(), human_strategy.strategy(), gen() & 1);
+    //return;
 
     //StrategyContainer rnd_strategy(new RandomStrategy());
     //rnd_strategy.strategy().Randomize(gen());
@@ -132,7 +145,8 @@ void Trainer()
     //    //if (PvP(best_strategy.strategy(), best_strategy.strategy(), i & 1))
     //    //if (PvP(best_strategy.strategy(), cur_strategy.strategy(), i & 1))
     //    //if (PvP(best_strategy.strategy(), test_strategy.strategy(), i & 1))
-    //    if (PvP(best_strategy.strategy(), rnd_strategy.strategy(), i & 1))
+    //    if (PvP(best_strategy.strategy(), train_strategy.strategy(), i & 1))
+    //    //if (PvP(best_strategy.strategy(), rnd_strategy.strategy(), i & 1))
     //    //if (PvP(rnd_strategy.strategy(), rnd_strategy.strategy(), i & 1))
     //    //if (PvP(test_strategy.strategy(), rnd_strategy.strategy(), i & 1))
     //        wins++;
@@ -146,9 +160,9 @@ void Trainer()
     //    float(*s_input)[FIELD_HEIGHT][FIELD_WIDTH] = (float(*)[FIELD_HEIGHT][FIELD_WIDTH])s.position.data();
     //    for (int i = 0; i < 6; i++)
     //    {
-    //        for (int j = 4; j >= 0; j--)
+    //        for (int j = FIELD_HEIGHT - 1; j >= 0; j--)
     //        {
-    //            for (int k = 0; k < 5; k++)
+    //            for (int k = 0; k < FIELD_WIDTH; k++)
     //                std::cout << s_input[i][j][k] << " ";
     //            std::cout << "\n";
     //        }
@@ -161,18 +175,18 @@ void Trainer()
     //    std::vector<float> tmp;
     //    net.output(0) >> tmp;
     //    float(*o_policy)[FIELD_WIDTH] = (float(*)[FIELD_WIDTH])tmp.data();
-    //    for (int i = 4; i >= 0; i--)
+    //    for (int i = FIELD_HEIGHT - 1; i >= 0; i--)
     //    {
-    //        for (int j = 0; j < 5; j++)
+    //        for (int j = 0; j < FIELD_WIDTH; j++)
     //            std::cout << o_policy[i][j] << " ";
     //        std::cout << "\n";
     //    }
     //    net.output(1) >> tmp;
-    //    std::cout << tmp[0] << "\n";
+    //    std::cout << tmp[0] << "/" << tmp[1] << "/" << tmp[2] << "\n";
     //    float(*s_policy)[FIELD_WIDTH] = (float(*)[FIELD_WIDTH])s.policy.data();
-    //    for (int i = 4; i >= 0; i--)
+    //    for (int i = FIELD_HEIGHT - 1; i >= 0; i--)
     //    {
-    //        for (int j = 0; j < 5; j++)
+    //        for (int j = 0; j < FIELD_WIDTH; j++)
     //            std::cout << s_policy[i][j] << " ";
     //        std::cout << "\n";
     //    }
@@ -210,16 +224,13 @@ void Trainer()
         //else
         //    std::cout << "loser:  ";
         //std::cout << wins << "/" << total << "\n";
-        for (int i = 0; i < 50; i++)
+        for (int i = 0; i < 40; i++)
             PvP(best_strategy.strategy(), best_strategy.strategy(), gen() & 1, &storage, true);
-        //for (int i = 100; i < 100; i++)
-        //{
-        //    /*PvP(best_strategy.strategy(), best_strategy.strategy(), gen() & 1, &storage, true);*/
-        //    PvP(train_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
-        //    //PvP(best_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
-        //    // bestNet vs bestNet
-        //    // save moves to storage
-        //}
+        for (int i = 40; i < 50; i++)
+        {
+            PvP(train_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
+            //PvP(best_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
+        }
         std::cout << ".";
         best_strategy.strategy().Train(storage);
         std::cout << ".\n";

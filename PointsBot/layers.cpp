@@ -1023,7 +1023,7 @@ void CrossEntropyLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memo
     //auto dims = memory::dims(desc.dims().size(), 1);
     //auto eps_mem = memory::desc(dims, net().data_type, GetStridesForDims(dims));
     //auto add_p = binary({ {algorithm::binary_add, desc, desc, desc}, net().engine });
-    auto clip_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_clip, desc, 1e-9, 1}, net().engine });
+    auto clip_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_clip, desc, 1e-7, 1 - 1e-7}, net().engine });
     auto inv_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_pow, desc, -1, -1}, net().engine });
     auto mul_p = binary({ {algorithm::binary_mul, desc, desc, desc}, net().engine });
     net().bwd.push_back({ clip_p,

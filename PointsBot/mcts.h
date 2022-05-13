@@ -3,8 +3,8 @@
 #include "layers.h"
 #include <random>
 
-constexpr int FIELD_HEIGHT = 5;
-constexpr int FIELD_WIDTH = 5;
+constexpr int FIELD_HEIGHT = 6;
+constexpr int FIELD_WIDTH = 6;
 
 constexpr float kUct = 1;
 
@@ -53,8 +53,15 @@ struct Prediction
     Prediction(int height, int width) : policy(height, width) {}
 };
 
-void FieldToNNInput(Field& field, void *input_)
+void FieldToNNInput(Field& field, void *input_) //, bool flip_h = false, bool flip_v = false, bool transpose = false)
 {
+    // input_[6][height][width]
+    //float* input = (float*)input_;
+    //short height = field.height, width = field.width;
+    //auto get_pos =
+    //    flip_h
+    //    ? [height, width](int c, int i, int j) { return c * height * width + i * width + width - j - 1; }
+    //    : [height, width](int c, int i, int j) { return c * height * width + i * width + j; };
     float(*input)[FIELD_HEIGHT][FIELD_WIDTH] = (float(*)[FIELD_HEIGHT][FIELD_WIDTH])input_;
     for (int i = 0; i < field.height; i++)
         for (int j = 0; j < field.width; j++)
@@ -111,7 +118,8 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
     if (net)
     {
         void* input = MemoryMapData(net->input);
-        FieldToNNInput(field, input);
+        //int flip = gen() & 7;
+        FieldToNNInput(field, input);//, flip & 1, flip & 2, flip & 4);
         MemoryUnmapData(net->input, input);
         dnnl::stream s(net->engine);
         net->Forward(s);
@@ -128,7 +136,7 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
         //}
         std::vector<float> value;
         net->output(1) >> value;
-        result.value = value[0];
+        result.value = value[0] - value[2];
     }
     else
     {
@@ -158,13 +166,15 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
             //float score = std::max(-1.f, std::min(1.f, field.GetScore(field.GetPlayer()) / 10.f));
             float score = std::max(-1, std::min(1, field.GetScore(field.GetPlayer())));
             node->value = score * node->visits;
+            // No uncertainty, so U = 0
+            node->prior_prob = 0;
             return score;
         }
         // Leaf, Expand
         Prediction prediction = Predict(field, net, gen);
         MctsNode** cur_child = &node->child;
         MoveList moves = field.GetAllMoves();
-        std::uniform_real_distribution<float> dist(0, 0.03);
+        std::uniform_real_distribution<float> dist(0, 0.01);
         for (Move move : moves)
             prediction.policy[move] += dist(gen);
         shuffle(moves.begin(), moves.end(), gen);

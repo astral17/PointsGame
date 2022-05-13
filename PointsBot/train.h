@@ -4,6 +4,7 @@
 #include "uct.h"
 #include <typeinfo>
 #include <algorithm>
+#include <iostream>
 #include <memory>
 #include "mcts.h"
 
@@ -78,64 +79,59 @@ struct StrategyContainer
 struct NeuralStrategy : Strategy
 {
     const int batch_size = 128;
-    static dnnl::engine eng;
+    dnnl::engine eng;
     NNetwork train_net, net;
     std::mt19937 gen;
     int strength;
     //static dnnl::engine eng;
-    NNetwork Build(const dnnl::engine& eng, dnnl::prop_kind kind, int batch)
+    virtual NNetwork Build(const dnnl::engine& eng, dnnl::prop_kind kind, int batch)
     {
         NNetwork net(eng, kind);
-        //InputLayer in(net, { batch, 6 * FIELD_HEIGHT * FIELD_WIDTH });
-        //DenseLayer dense(in, 12 * FIELD_HEIGHT * FIELD_WIDTH);
-        //ReluLayer relu(dense);
-        //DenseLayer dense_policy(relu, FIELD_HEIGHT * FIELD_WIDTH);
-        //SoftMaxLayer soft(dense_policy);
-        //DenseLayer dense_value(relu, 1);
-        //TanhLayer tanh(dense_value);
-        //CrossEntropyLoss loss_policy(net);
-        //MeanSquaredLoss loss_value(net);
-        //net.Build({ &soft, &tanh }, 0.1, { &loss_policy, &loss_value});
 
+        constexpr int kBlocks = 2;
         constexpr int kFilters = 32;
+        constexpr int kPolicyFilters = 16;
+        constexpr int kValueFilters = 16;
+        constexpr int kSeSize = 8;
+        constexpr int kReluAlpha = 0;
         std::vector<std::unique_ptr<Layer>> layers;
         layers.emplace_back(new InputLayer(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH }));
         layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, 6, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
         layers.emplace_back(new BatchNormLayer(*layers.back()));
 
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < kBlocks; i++)
         {
             Layer& residual = *layers.back();
             layers.emplace_back(new ConvLayer(residual, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
             layers.emplace_back(new BatchNormLayer(*layers.back()));
             layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
             layers.emplace_back(new BatchNormLayer(*layers.back()));
-            layers.emplace_back(new SELayer(*layers.back(), kFilters));
+            layers.emplace_back(new SELayer(*layers.back(), kSeSize));
             layers.emplace_back(new LayerAdder(residual, *layers.back()));
-            layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
+            layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
         }
         Layer& tower_last = *layers.back();
-        layers.emplace_back(new ConvLayer(tower_last, { 2, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        layers.emplace_back(new ConvLayer(tower_last, { kPolicyFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
         layers.emplace_back(new BatchNormLayer(*layers.back()));
-        layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
+        layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
         layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
         layers.emplace_back(new SoftMaxLayer(*layers.back()));
         Layer& policy_layer = *layers.back();
 
-        layers.emplace_back(new ConvLayer(tower_last, { 1, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        layers.emplace_back(new ConvLayer(tower_last, { kValueFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
         layers.emplace_back(new BatchNormLayer(*layers.back()));
-        layers.emplace_back(new ReluLayer(*layers.back(), 0.3));
-        layers.emplace_back(new DenseLayer(*layers.back(), 1));
-        layers.emplace_back(new TanhLayer(*layers.back()));
+        layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
+        layers.emplace_back(new DenseLayer(*layers.back(), 3)); // win, draw, lose
+        layers.emplace_back(new SoftMaxLayer(*layers.back()));
         Layer& value_layer = *layers.back();
 
         CrossEntropyLoss loss_policy(net);
-        MeanSquaredLoss loss_value(net);
+        CrossEntropyLoss loss_value(net);
         net.Build({ &policy_layer, &value_layer }, 0.01, { &loss_policy, &loss_value });
         return net;
     }
-    NeuralStrategy(int strength = 100)
-        : //eng(dnnl::engine::kind::cpu, 0),
+    NeuralStrategy(int strength = 100, dnnl::engine::kind eng_kind = dnnl::engine::kind::cpu)
+        : eng(eng_kind, 0),
         strength(strength),
         train_net(Build(eng, dnnl::prop_kind::forward_training, batch_size)),
         net(Build(eng, dnnl::prop_kind::forward_inference, 1))
@@ -169,55 +165,23 @@ struct NeuralStrategy : Strategy
                 auto& cur = storage[dist(gen)];
                 input_pos = std::copy(cur.position.begin(), cur.position.end(), input_pos);
                 answer_pos = std::copy(cur.policy.begin(), cur.policy.end(), answer_pos);
-                *answer_value_pos++ = cur.value;
+                *answer_value_pos++ = cur.value > 0;
+                *answer_value_pos++ = cur.value == 0;
+                *answer_value_pos++ = cur.value < 0;
             }
-            //if (input_pos - input > GetMemoryCount(train_net.input) || answer_pos - answer > GetMemoryCount(train_net.answer))
-            //{
-            //    std::cout << input_pos - input << " " << GetMemoryCount(train_net.input) << "\n";
-            //    std::cout << answer_pos - answer << " " << GetMemoryCount(train_net.answer) << "\n";
-            //    std::cout << "BAD FAIL\n";
-            //}
             MemoryUnmapData(train_net.input, input);
             MemoryUnmapData(train_net.answer(0), answer);
             MemoryUnmapData(train_net.answer(1), answer_value);
             train_net.Forward(s);
             train_net.Backward(s);
             s.wait();
-            //std::vector<float> tmp2;
-            //train_net.grad(0) >> tmp2;
-            //float max_value_2 = -123;
-            //for (int j = 0; j < tmp2.size(); j++)
-            //    max_value_2 = std::max(max_value_2, std::abs(tmp2[j]));
-            //std::cout << max_value_2 << "\n";
-            //for (int i = 0; i < train_net.weights.size(); i++)
-            //{
-            //    std::vector<float> tmp;
-            //    std::vector<float> tmp2;
-            //    train_net.weights[i] >> tmp;
-            //    net.weights[i] >> tmp2;
-            //    for (int j = 0; j < tmp.size(); j++)
-            //        max_value_2 = std::max(max_value_2, std::abs(tmp[j] - tmp2[j]));
-            //}
-            //std::cout << max_value_2 << "\n";
         }
-        //float max_value = -123;
         for (int i = 0; i < train_net.weights.size(); i++)
         {
             std::vector<float> tmp;
-            //std::vector<float> tmp2;
-            //net.weights[i] >> tmp2;
-            //if (GetMemoryByteSize(train_net.weights[i]) != GetMemoryByteSize(net.weights[i]))
-            //{
-            //    std::cout << "EPIC FAIL\n";
-            //}
             train_net.weights[i] >> tmp;
             net.weights[i] << tmp;
-
-            //assert(tmp.size() == tmp2.size());
-            //for (int j = 0; j < tmp.size(); j++)
-            //    max_value = std::max(max_value, std::abs(tmp[j] - tmp2[j]));
         }
-        //std::cout << max_value << "\n";
     }
     virtual void Randomize(int seed) override
     {
@@ -286,6 +250,23 @@ struct RandomStrategy : Strategy
         MoveList moves = field.GetAllMoves();
         std::uniform_int_distribution<int> dist(0, moves.size() - 1);
         field.MakeMove(moves[dist(gen)]);
+    }
+};
+
+struct HumanStrategy : Strategy
+{
+    virtual void MakeMove(Field& field, MoveStorage* storage = nullptr, bool train = false) override
+    {
+        field.DebugPrint(std::cout, std::to_string(field.GetScore(field.GetPlayer())), true, true);
+        std::cout << "Move: ";
+        Move move;
+        do
+        {
+            short x, y;
+            std::cin >> x >> y;
+            move = field.ToMove(x, y);
+        } while (!field.CouldMove(move));
+        field.MakeMove(move);
     }
 };
 
