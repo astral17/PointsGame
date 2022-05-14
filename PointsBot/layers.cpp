@@ -997,6 +997,67 @@ void SoftMaxLayer::Init()
     }
 }
 
+LogSoftMaxLayer::LogSoftMaxLayer(Layer& input, int axis) : Layer(input.net()), input(input), axis(axis)
+{
+    input.IncDependencies();
+}
+
+void LogSoftMaxLayer::Init()
+{
+    NNetwork& net = this->net();
+    input.DecDependencies();
+    auto desc = input.output_desc();
+
+    if (axis == -1)
+    {
+        auto dims = desc.dims();
+        for (size_t i = 2; i < dims.size(); i++)
+            dims[1] *= dims[i];
+        dims.resize(2);
+        desc = desc.reshape(dims);
+        axis = 1;
+    }
+
+    auto soft_pd = logsoftmax_forward::primitive_desc({ net.kind, desc, axis }, net.engine);
+    auto soft_fwd = logsoftmax_forward(soft_pd);
+
+    output({ desc, net.engine });
+
+    net.fwd.push_back({ soft_fwd,
+    {
+        {DNNL_ARG_SRC, input.output()},
+        {DNNL_ARG_DST, output()},
+    } });
+    // Backward
+    if (net.kind == dnnl::prop_kind::forward_training)
+    {
+        dst_grad({ desc, net.engine });
+        auto soft_bwd = logsoftmax_backward({ { desc, desc, axis }, net.engine, soft_pd });
+        auto reverse_from = net.bwd.size();
+        if (input.dst_grad())
+        {
+            net.bwd.push_back({ soft_bwd,
+            {
+                {DNNL_ARG_DIFF_SRC, !input.dependency_count() ? input.dst_grad() : input.dst_grad_2()},
+                {DNNL_ARG_DST, output()},
+                {DNNL_ARG_DIFF_DST, dst_grad()},
+            } });
+
+            if (input.dependency_count()) // grad saved to buffer, so should add to main memory
+            {
+                auto adder = binary({ {algorithm::binary_add, desc, desc, desc}, net.engine });
+                net.bwd.push_back({ adder,
+                {
+                    {DNNL_ARG_SRC_0, input.dst_grad()},
+                    {DNNL_ARG_SRC_1, input.dst_grad_2()},
+                    {DNNL_ARG_DST, input.dst_grad()},
+                } });
+            }
+        }
+        std::reverse(net.bwd.begin() + reverse_from, net.bwd.end());
+    }
+}
+
 MeanSquaredLoss::MeanSquaredLoss(NNetwork& net) : Loss(net)
 {
 }
@@ -1042,6 +1103,30 @@ void CrossEntropyLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memo
     {
         {DNNL_ARG_SRC_0, grad},
         {DNNL_ARG_SRC_1, answer},
+        {DNNL_ARG_DST, grad},
+    } });
+}
+
+NLLLoss::NLLLoss(NNetwork& net) : Loss(net)
+{
+}
+
+void NLLLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad)
+{
+    auto desc = answer.get_desc();
+    auto mul_p = binary({ {algorithm::binary_mul, desc, desc, desc}, net().engine });
+    auto neg_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_linear, desc, -1, 0}, net().engine });
+
+    net().bwd.push_back({ mul_p,
+    {
+        {DNNL_ARG_SRC_0, output},
+        {DNNL_ARG_SRC_1, answer},
+        {DNNL_ARG_DST, grad},
+    } });
+
+    net().bwd.push_back({ neg_p,
+    {
+        {DNNL_ARG_SRC, grad},
         {DNNL_ARG_DST, grad},
     } });
 }

@@ -115,18 +115,18 @@ struct NeuralStrategy : Strategy
         layers.emplace_back(new BatchNormLayer(*layers.back()));
         layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
         layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
-        layers.emplace_back(new SoftMaxLayer(*layers.back()));
+        layers.emplace_back(new LogSoftMaxLayer(*layers.back()));
         Layer& policy_layer = *layers.back();
 
         layers.emplace_back(new ConvLayer(tower_last, { kValueFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
         layers.emplace_back(new BatchNormLayer(*layers.back()));
         layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
         layers.emplace_back(new DenseLayer(*layers.back(), 3)); // win, draw, lose
-        layers.emplace_back(new SoftMaxLayer(*layers.back()));
+        layers.emplace_back(new LogSoftMaxLayer(*layers.back()));
         Layer& value_layer = *layers.back();
 
-        CrossEntropyLoss loss_policy(net);
-        CrossEntropyLoss loss_value(net);
+        NLLLoss loss_policy(net);
+        NLLLoss loss_value(net);
         net.Build({ &policy_layer, &value_layer }, 0.01, { &loss_policy, &loss_value });
         return net;
     }

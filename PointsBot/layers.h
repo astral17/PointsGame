@@ -326,6 +326,15 @@ public:
     virtual void Init() override;
 };
 
+struct LogSoftMaxLayer : Layer
+{
+    Layer& input;
+    int axis;
+public:
+    LogSoftMaxLayer(Layer& input, int axis = -1);
+    virtual void Init() override;
+};
+
 struct MeanSquaredLoss : Loss
 {
     MeanSquaredLoss(NNetwork& net);
@@ -335,5 +344,11 @@ struct MeanSquaredLoss : Loss
 struct CrossEntropyLoss : Loss
 {
     CrossEntropyLoss(NNetwork& net);
+    virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad);
+};
+
+struct NLLLoss : Loss
+{
+    NLLLoss(NNetwork& net);
     virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad);
 };

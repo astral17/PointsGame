@@ -127,7 +127,8 @@ void Trainer()
     std::mt19937 gen(time(0));
     test_strategy.strategy().Randomize(gen());
     train_strategy.strategy().Randomize(gen());
-    //best_strategy.strategy().Randomize(gen());
+    best_strategy.strategy().Randomize(gen());
+    //((NeuralStrategy*)best_strategy.strategy_.get())->net.SaveWeights("weights_last.bwf");
     ((NeuralStrategy*)best_strategy.strategy_.get())->net.LoadWeights("weights_last.bwf");
     //((NeuralStrategy*)cur_strategy.strategy_.get())->net.LoadWeights("weights_last_cnn_1.bwf");
 
@@ -178,11 +179,11 @@ void Trainer()
     //    for (int i = FIELD_HEIGHT - 1; i >= 0; i--)
     //    {
     //        for (int j = 0; j < FIELD_WIDTH; j++)
-    //            std::cout << o_policy[i][j] << " ";
+    //            std::cout << std::exp(o_policy[i][j]) << " ";
     //        std::cout << "\n";
     //    }
     //    net.output(1) >> tmp;
-    //    std::cout << tmp[0] << "/" << tmp[1] << "/" << tmp[2] << "\n";
+    //    std::cout << std::exp(tmp[0]) << "/" << std::exp(tmp[1]) << "/" << std::exp(tmp[2]) << "\n";
     //    float(*s_policy)[FIELD_WIDTH] = (float(*)[FIELD_WIDTH])s.policy.data();
     //    for (int i = FIELD_HEIGHT - 1; i >= 0; i--)
     //    {

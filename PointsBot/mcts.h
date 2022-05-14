@@ -125,6 +125,8 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
         net->Forward(s);
         s.wait();
         net->output(0) >> result.policy.policy;
+        for (auto& x : result.policy.policy)
+            x = std::exp(x);
         //if (isnan(result.policy.policy[0]))
         //{
         //    for (int i = 0; i < net->weights.size(); i++)
@@ -136,7 +138,7 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
         //}
         std::vector<float> value;
         net->output(1) >> value;
-        result.value = value[0] - value[2];
+        result.value = std::exp(value[0]) - std::exp(value[2]);
     }
     else
     {
