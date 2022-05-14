@@ -34,23 +34,16 @@ struct MctsNode
     }
 };
 
-struct Policy
-{
-    std::vector<float> policy;
-    short height, width;
-    float& operator[](Move move)
-    {
-        return policy[Field::ToY(move, width) * width + Field::ToX(move, width)];
-    }
-    size_t size() const { return policy.size(); }
-    Policy(short height, short width) : height(height), width(width), policy(height * width, 0) {}
-};
-
 struct Prediction
 {
+    std::vector<float> policy;
     float value = 0;
-    Policy policy;
-    Prediction(int height, int width) : policy(height, width) {}
+    short height, width;
+    size_t MoveToIndex(Move move) const
+    {
+        return Field::ToY(move, width)* width + Field::ToX(move, width);
+    }
+    Prediction(int height, int width, int size) : height(height), width(width), policy(size) {}
 };
 
 void FieldToNNInput(Field& field, void *input_) //, bool flip_h = false, bool flip_v = false, bool transpose = false)
@@ -108,9 +101,9 @@ float MctsRandomGame(Field& field, std::mt19937& gen, MoveList moves)
     return result;
 }
 
-Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
+Prediction Predict(Field& field, const MoveList& moves, std::mt19937& gen, NNetwork* net = nullptr)
 {
-    Prediction result(field.height, field.width);
+    Prediction result(field.height, field.width, moves.size());
     //std::uniform_real_distribution<float> dist(-1, 1);
     //result.value = dist(gen);
     //for (int i = 0; i < result.policy.size(); i++)
@@ -124,29 +117,33 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
         dnnl::stream s(net->engine);
         net->Forward(s);
         s.wait();
-        net->output(0) >> result.policy.policy;
-        for (auto& x : result.policy.policy)
-            x = std::exp(x);
-        //if (isnan(result.policy.policy[0]))
-        //{
-        //    for (int i = 0; i < net->weights.size(); i++)
-        //    {
-        //        vector<float> tmp;
-        //        net->weights[i] >> tmp;
-        //        std::cout << "hmm";
-        //    }
-        //}
+        float* policy = (float*)MemoryMapData(net->output(0));
+        // softmax on available moves
+        float max_p = -std::numeric_limits<float>::infinity();
+        for (int i = 0; i < moves.size(); i++)
+        {
+            float p = policy[result.MoveToIndex(moves[i])];
+            result.policy[i] = p;
+            max_p = std::max(max_p, p);
+        }
+        float total = 0;
+        for (int i = 0; i < moves.size(); i++)
+        {
+            float p = std::exp(result.policy[i] - max_p);
+            result.policy[i] = p;
+            total += p;
+        }
+        MemoryUnmapData(net->output(0), policy);
         std::vector<float> value;
         net->output(1) >> value;
-        result.value = std::exp(value[0]) - std::exp(value[2]);
+        result.value = value[0] - value[2];
     }
     else
     {
-        MoveList moves = field.GetAllMoves();
         result.value = MctsRandomGame(field, gen, moves);
-        for (Move move : moves)
+        for (int i = 0; i < moves.size(); i++)
         {
-            result.policy[move] = 1.f / moves.size();
+            result.policy[i] = 1.f / moves.size();
         //    field.MakeMove(move);
         //    result.policy[move] = MctsRandomGame(field, gen, moves);
         //    field.Undo();
@@ -157,7 +154,7 @@ Prediction Predict(Field& field, NNetwork* net, std::mt19937& gen)
 }
 
 // Return score for field current player
-float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
+float MctsSearch(Field& field, MctsNode* node, std::mt19937& gen, NNetwork* net = nullptr)
 {
     if (!node->child)
     {
@@ -173,16 +170,16 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
             return score;
         }
         // Leaf, Expand
-        Prediction prediction = Predict(field, net, gen);
-        MctsNode** cur_child = &node->child;
         MoveList moves = field.GetAllMoves();
-        std::uniform_real_distribution<float> dist(0, 0.01);
-        for (Move move : moves)
-            prediction.policy[move] += dist(gen);
         shuffle(moves.begin(), moves.end(), gen);
-        for (Move move : moves)
+        Prediction prediction = Predict(field, moves, gen, net);
+        MctsNode** cur_child = &node->child;
+        std::uniform_real_distribution<float> dist(0, 0.01);
+        for (float& x : prediction.policy)
+            x += dist(gen);
+        for (int i = 0; i < moves.size(); i++)
         {
-            *cur_child = new MctsNode(move, prediction.policy[move]);
+            *cur_child = new MctsNode(moves[i], prediction.policy[i]);
             cur_child = &(*cur_child)->sibling;
         }
         // Backpropogation
@@ -209,7 +206,7 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
         exit(-123);
     }
     field.MakeMove(best->move);
-    float result = -MctsSearch(field, best, net, gen);
+    float result = -MctsSearch(field, best, gen, net);
     // Backpropogation
     node->value += result;
     node->visits++;
@@ -217,10 +214,10 @@ float MctsSearch(Field& field, MctsNode* node, NNetwork* net, std::mt19937& gen)
     return result;
 }
 
-Move Mcts(Field& field, MctsNode& root, NNetwork* net, std::mt19937& gen, int simulations, bool train = false)
+Move Mcts(Field& field, MctsNode& root, std::mt19937& gen, NNetwork* net, int simulations, bool train = false)
 {
     for (int i = 0; i < simulations; i++)
-        MctsSearch(field, &root, net, gen);
+        MctsSearch(field, &root, gen, net);
 
     MctsNode* best = nullptr;
     if (!train)
@@ -260,8 +257,8 @@ Move Mcts(Field& field, MctsNode& root, NNetwork* net, std::mt19937& gen, int si
     return best ? best->move : -1;
 }
 
-Move Mcts(Field& field, NNetwork* net, std::mt19937& gen, int simulations, bool train = false)
+Move Mcts(Field& field, std::mt19937& gen, NNetwork* net, int simulations, bool train = false)
 {
     MctsNode root;
-    return Mcts(field, root, net, gen, simulations, train);
+    return Mcts(field, root, gen, net, simulations, train);
 }

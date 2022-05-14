@@ -115,18 +115,18 @@ struct NeuralStrategy : Strategy
         layers.emplace_back(new BatchNormLayer(*layers.back()));
         layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
         layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
-        layers.emplace_back(new LogSoftMaxLayer(*layers.back()));
         Layer& policy_layer = *layers.back();
 
         layers.emplace_back(new ConvLayer(tower_last, { kValueFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
         layers.emplace_back(new BatchNormLayer(*layers.back()));
         layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
         layers.emplace_back(new DenseLayer(*layers.back(), 3)); // win, draw, lose
-        layers.emplace_back(new LogSoftMaxLayer(*layers.back()));
+        if (kind == dnnl::prop_kind::forward_scoring)
+            layers.emplace_back(new SoftMaxLayer(*layers.back()));
         Layer& value_layer = *layers.back();
 
-        NLLLoss loss_policy(net);
-        NLLLoss loss_value(net);
+        CrossEntropyLoss loss_policy(net, true);
+        CrossEntropyLoss loss_value(net, true);
         net.Build({ &policy_layer, &value_layer }, 0.01, { &loss_policy, &loss_value });
         return net;
     }
@@ -191,7 +191,7 @@ struct NeuralStrategy : Strategy
     virtual void MakeMove(Field& field, MoveStorage* storage = nullptr, bool train = false) override
     {
         MctsNode node;
-        Move move = Mcts(field, node, &net, gen, strength, train);
+        Move move = Mcts(field, node, gen, &net, strength, train);
         // Save predictions
         if (storage)
         {
@@ -221,7 +221,7 @@ struct MctsStrategy : Strategy
     {
         //field.MakeMove(Uct(field, gen, strength));
         MctsNode node;
-        Move move = Mcts(field, node, nullptr, gen, strength, train);
+        Move move = Mcts(field, node, gen, nullptr, strength, train);
         // Save predictions
         if (storage)
         {

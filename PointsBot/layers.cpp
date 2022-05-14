@@ -154,7 +154,6 @@ void NNetwork::Build(const std::vector<Layer*>& output, float learn_rate, const 
     }
     for (auto layer : layers)
         layer->Init();
-    auto reverse_from = bwd.size();
     for (int i = 0; i < output.size(); i++)
     {
         Layer* layer = output[i];
@@ -169,7 +168,6 @@ void NNetwork::Build(const std::vector<Layer*>& output, float learn_rate, const 
             cur_loss->Init(outputs.back(), answers.back(), grads.back());
         }
     }
-    std::reverse(bwd.begin() + reverse_from, bwd.end());
     std::reverse(bwd.begin(), bwd.end());
 }
 
@@ -1074,39 +1072,6 @@ void MeanSquaredLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memor
     } });
 }
 
-CrossEntropyLoss::CrossEntropyLoss(NNetwork& net) : Loss(net)
-{
-}
-
-void CrossEntropyLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad)
-{
-    auto desc = answer.get_desc();
-    //auto dims = memory::dims(desc.dims().size(), 1);
-    //auto eps_mem = memory::desc(dims, net().data_type, GetStridesForDims(dims));
-    //auto add_p = binary({ {algorithm::binary_add, desc, desc, desc}, net().engine });
-    auto clip_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_clip, desc, 1e-7, 1 - 1e-7}, net().engine });
-    auto inv_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_pow, desc, -1, -1}, net().engine });
-    auto mul_p = binary({ {algorithm::binary_mul, desc, desc, desc}, net().engine });
-    net().bwd.push_back({ clip_p,
-    {
-        {DNNL_ARG_SRC, output},
-        {DNNL_ARG_DST, grad},
-    } });
-
-    net().bwd.push_back({ inv_p,
-    {
-        {DNNL_ARG_SRC, grad},
-        {DNNL_ARG_DST, grad},
-    } });
-
-    net().bwd.push_back({ mul_p,
-    {
-        {DNNL_ARG_SRC_0, grad},
-        {DNNL_ARG_SRC_1, answer},
-        {DNNL_ARG_DST, grad},
-    } });
-}
-
 NLLLoss::NLLLoss(NNetwork& net) : Loss(net)
 {
 }
@@ -1114,19 +1079,70 @@ NLLLoss::NLLLoss(NNetwork& net) : Loss(net)
 void NLLLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad)
 {
     auto desc = answer.get_desc();
-    auto mul_p = binary({ {algorithm::binary_mul, desc, desc, desc}, net().engine });
     auto neg_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_linear, desc, -1, 0}, net().engine });
-
-    net().bwd.push_back({ mul_p,
-    {
-        {DNNL_ARG_SRC_0, output},
-        {DNNL_ARG_SRC_1, answer},
-        {DNNL_ARG_DST, grad},
-    } });
 
     net().bwd.push_back({ neg_p,
     {
-        {DNNL_ARG_SRC, grad},
+        {DNNL_ARG_SRC, answer},
         {DNNL_ARG_DST, grad},
     } });
+}
+
+CrossEntropyLoss::CrossEntropyLoss(NNetwork& net, bool from_logits) : Loss(net), from_logits(from_logits)
+{
+}
+
+void CrossEntropyLoss::Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad)
+{
+    auto desc = answer.get_desc();
+
+    auto reverse_from = net().bwd.size();
+    if (from_logits)
+    {
+        auto lsm_pd = logsoftmax_forward::primitive_desc({ net().kind, desc, 1 }, net().engine);
+        auto lsm_fwd = logsoftmax_forward(lsm_pd);
+        auto lsm_bwd = logsoftmax_backward({ { desc, desc, 1 }, net().engine, lsm_pd });
+        auto buffer = memory(desc, net().engine);
+        net().bwd.push_back({ lsm_fwd,
+        {
+            {DNNL_ARG_SRC, output},
+            {DNNL_ARG_DST, buffer},
+        } });
+        net().bwd.push_back({ lsm_bwd,
+        {
+            {DNNL_ARG_DIFF_SRC, grad},
+            {DNNL_ARG_DIFF_DST, answer},
+            {DNNL_ARG_DST, buffer},
+        } });
+
+        auto neg_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_linear, desc, -1, 0}, net().engine });
+        net().bwd.push_back({ neg_p,
+        {
+            {DNNL_ARG_SRC, grad},
+            {DNNL_ARG_DST, grad},
+        } });
+    }
+    else
+    {
+        auto clip_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_clip, desc, 1e-7, 1 - 1e-7}, net().engine });
+        auto inv_p = eltwise_forward({ {prop_kind::forward_inference, algorithm::eltwise_pow, desc, -1, -1}, net().engine });
+        auto mul_p = binary({ {algorithm::binary_mul, desc, desc, desc}, net().engine });
+        net().bwd.push_back({ clip_p,
+        {
+            {DNNL_ARG_SRC, output},
+            {DNNL_ARG_DST, grad},
+        } });
+        net().bwd.push_back({ inv_p,
+        {
+            {DNNL_ARG_SRC, grad},
+            {DNNL_ARG_DST, grad},
+        } });
+        net().bwd.push_back({ mul_p,
+        {
+            {DNNL_ARG_SRC_0, grad},
+            {DNNL_ARG_SRC_1, answer},
+            {DNNL_ARG_DST, grad},
+        } });
+    }
+    std::reverse(net().bwd.begin() + reverse_from, net().bwd.end());
 }

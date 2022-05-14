@@ -341,14 +341,15 @@ struct MeanSquaredLoss : Loss
     virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad);
 };
 
-struct CrossEntropyLoss : Loss
-{
-    CrossEntropyLoss(NNetwork& net);
-    virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad);
-};
-
 struct NLLLoss : Loss
 {
     NLLLoss(NNetwork& net);
+    virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad);
+};
+
+struct CrossEntropyLoss : Loss
+{
+    bool from_logits;
+    CrossEntropyLoss(NNetwork& net, bool from_logits = false);
     virtual void Init(dnnl::memory output, dnnl::memory answer, dnnl::memory grad);
 };
