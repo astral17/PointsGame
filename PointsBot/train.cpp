@@ -1,5 +1,6 @@
 #include "train.h"
 #include "mcts.h"
+#include <Windows.h>
 
 void RightRotateTo(const MoveRecord& src, MoveRecord& dst)
 {
@@ -82,7 +83,15 @@ bool PvP(Strategy& a, Strategy& b, Player first, MoveStorage* storage, bool trai
     {
         if (storage)
             last = storage->r;
+        //LARGE_INTEGER frequency;
+        //QueryPerformanceFrequency(&frequency);
+        //LARGE_INTEGER stime;
+        //QueryPerformanceCounter(&stime);
         cur_player->MakeMove(field, storage, train);
+        //LARGE_INTEGER end;
+        //QueryPerformanceCounter(&end);
+        //double interval = static_cast<double>(end.QuadPart - stime.QuadPart) / frequency.QuadPart;
+        //cout << "Used time: " << interval << "\n";
         if (storage && last != storage->r)
         {
             pos[field.GetNextPlayer()].push_back(last);
@@ -118,11 +127,11 @@ void Trainer()
     //StrategyContainer test_strategy(new NeuralStrategy(500));
     //StrategyContainer test_strategy(new RandomStrategy());
     StrategyContainer train_strategy(new MctsStrategy(10000));
-    StrategyContainer best_strategy(new NeuralStrategy(200));
+    StrategyContainer best_strategy(new NeuralStrategy(2));
     //StrategyContainer best_strategy(new RandomStrategy());
     //StrategyContainer cur_strategy(new NeuralStrategy(100));
 
-    MoveStorage storage((FIELD_HEIGHT * FIELD_WIDTH - 4) * 50 * 8 * 4);
+    MoveStorage storage((FIELD_HEIGHT * FIELD_WIDTH - 4) * 50 * 8 * 10);
     //std::mt19937 gen(1351925);
     std::mt19937 gen(time(0));
     test_strategy.strategy().Randomize(gen());
@@ -133,28 +142,32 @@ void Trainer()
     //((NeuralStrategy*)cur_strategy.strategy_.get())->net.LoadWeights("weights_last_cnn_1.bwf");
 
     //StrategyContainer human_strategy(new HumanStrategy());
-    ////PvP(best_strategy.strategy(), human_strategy.strategy(), gen() & 1);
-    //PvP(train_strategy.strategy(), human_strategy.strategy(), gen() & 1);
+    //PvP(best_strategy.strategy(), human_strategy.strategy(), gen() & 1);
+    ////PvP(train_strategy.strategy(), human_strategy.strategy(), gen() & 1);
     //return;
 
-    //StrategyContainer rnd_strategy(new RandomStrategy());
-    //rnd_strategy.strategy().Randomize(gen());
-    //int wins = 0, total = 100;
-    //for (int i = 0; i < total; i++)
-    //    //if (PvP(best_strategy.strategy(), test_strategy.strategy(), gen() & 1))
-    //    //if (PvP(test_strategy.strategy(), test_strategy.strategy(), i & 1))
-    //    //if (PvP(best_strategy.strategy(), best_strategy.strategy(), i & 1))
-    //    //if (PvP(best_strategy.strategy(), cur_strategy.strategy(), i & 1))
-    //    //if (PvP(best_strategy.strategy(), test_strategy.strategy(), i & 1))
-    //    //if (PvP(best_strategy.strategy(), train_strategy.strategy(), i & 1))
-    //    if (PvP(best_strategy.strategy(), rnd_strategy.strategy(), i & 1))
-    //    //if (PvP(rnd_strategy.strategy(), rnd_strategy.strategy(), i & 1))
-    //    //if (PvP(test_strategy.strategy(), rnd_strategy.strategy(), i & 1))
-    //        wins++;
-    //std::cout << "Result: " << wins << "/" << total << "\n";
-    //return;
+    StrategyContainer rnd_strategy(new RandomStrategy());
+    StrategyContainer ab_strategy(new AlphaBetaStrategy(5));
+    rnd_strategy.strategy().Randomize(gen());
+    int wins = 0, total = 100;
+    for (int i = 0; i < total; i++)
+        //if (PvP(best_strategy.strategy(), test_strategy.strategy(), gen() & 1))
+        //if (PvP(test_strategy.strategy(), test_strategy.strategy(), i & 1))
+        //if (PvP(test_strategy.strategy(), ab_strategy.strategy(), i & 1))
+        //if (PvP(best_strategy.strategy(), best_strategy.strategy(), i & 1))
+        //if (PvP(best_strategy.strategy(), cur_strategy.strategy(), i & 1))
+        if (PvP(best_strategy.strategy(), test_strategy.strategy(), i & 1))
+        //if (PvP(best_strategy.strategy(), train_strategy.strategy(), i & 1))
+        //if (PvP(best_strategy.strategy(), rnd_strategy.strategy(), i & 1))
+        //if (PvP(rnd_strategy.strategy(), rnd_strategy.strategy(), i & 1))
+        //if (PvP(test_strategy.strategy(), rnd_strategy.strategy(), i & 1))
+        //if (PvP(test_strategy.strategy(), train_strategy.strategy(), i & 1))
+            wins++;
+    std::cout << "Result: " << wins << "/" << total << "\n";
+    return;
     //std::cout << (int)PvP(best_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage) << "\n";
-    //std::cout << (int)PvP(test_strategy.strategy(), test_strategy.strategy(), gen() & 1, &storage) << "\n";
+    ////std::cout << (int)PvP(best_strategy.strategy(), rnd_strategy.strategy(), gen() & 1, &storage) << "\n";
+    ////std::cout << (int)PvP(test_strategy.strategy(), test_strategy.strategy(), gen() & 1, &storage) << "\n";
     //for (int m = 0; m < storage.r; m++)
     //{
     //    std::cout << "--- MOVE: " << m / 8 << " ---\n";
@@ -227,9 +240,9 @@ void Trainer()
         //else
         //    std::cout << "loser:  ";
         //std::cout << wins << "/" << total << "\n";
-        for (int i = 0; i < 40; i++)
-            PvP(best_strategy.strategy(), best_strategy.strategy(), gen() & 1, &storage, true);
-        for (int i = 40; i < 50; i++)
+        //for (int i = 0; i < 50; i++)
+        //    PvP(best_strategy.strategy(), best_strategy.strategy(), gen() & 1, &storage, true);
+        for (int i = 0; i < 50; i++)
         {
             PvP(train_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
             //PvP(best_strategy.strategy(), train_strategy.strategy(), gen() & 1, &storage, true);
@@ -246,7 +259,7 @@ void Trainer()
                     wins++;
             }
             std::cout << "Test: " << wins << "/" << total << "\n";
-            if (wins > 3)
+            if (wins > 4)
                 ((NeuralStrategy*)best_strategy.strategy_.get())->net.SaveWeights("weights_" + std::to_string(run) + "_" + std::to_string(wins) + ".bwf");
         }
         if (run % 2 == 0)

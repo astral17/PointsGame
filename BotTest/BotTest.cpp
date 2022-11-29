@@ -202,7 +202,7 @@ int main()
 	////Move m_move = Uct(field, gen, 100);
 	//field.MakeMove(m_move);
 	//field.DebugPrint(cout, "After", true, true);
-	Trainer();
+	//Trainer();
 	//ifstream fin("weights_last.bwf", ios::binary);
 	//float x;
 	//while (fin.read((char*)&x, 4))
@@ -210,7 +210,7 @@ int main()
 	//	if (x < -2 || x > 2 || isnan(x))
 	//		cout << x << " ";
 	//}
-	return 0;
+	//return 0;
 	//Field field(3, 3, 1);
 	//field.MakeMove(field.ToMove(1, 1));
 	//field.MakeMove(field.ToMove(1, 2));
@@ -218,39 +218,39 @@ int main()
 	//field.MakeMove(field.ToMove(2, 1));
 	//field.MakeMove(field.ToMove(2, 2));
 	//field.MakeMove(field.ToMove(0, 1));
-	Field field(5, 5);
+	Field field(20, 20);
 	//Field field(20, 20);
 	//Field field(11, 10, 1);
 	//Field field(20, 20, 1);
 	//for (int i = 0; i < field.height; i++)
 	//	for (int j = 0; j < field.width; j++)
 	//		field.field[field.ToMove(j, field.height - 1 - i)] = SetField[i * field.width + j];
-	field.MakeMove(field.ToMove(2, 2));
-	field.MakeMove(field.ToMove(2, 3));
-	field.MakeMove(field.ToMove(1, 3));
-	field.MakeMove(field.ToMove(1, 2));
-	field.MakeMove(field.ToMove(2, 4));
-	field.MakeMove(field.ToMove(3, 2));
-	field.MakeMove(field.ToMove(3, 3));
-	field.MakeMove(field.ToMove(2, 1));
-	field.MakeMove(field.ToMove(0, 0));
-	field.MakeMove(field.ToMove(3, 0));
-	field.MakeMove(field.ToMove(0, 1));
-	field.MakeMove(field.ToMove(4, 1));
-	field.DebugPrint(cout, "", true, true);
-	float input[6][5][5];
-	FieldToNNInput(field, input);
-	for (int i = 0; i < 6; i++)
-	{
-		for (int j = 4; j >= 0; j--)
-		{
-			for (int k = 0; k < 5; k++)
-				cout << input[i][j][k] << " ";
-			cout << "\n";
-		}
-		cout << "\n";
-	}
-	return 0;
+	//field.MakeMove(field.ToMove(2, 2));
+	//field.MakeMove(field.ToMove(2, 3));
+	//field.MakeMove(field.ToMove(1, 3));
+	//field.MakeMove(field.ToMove(1, 2));
+	//field.MakeMove(field.ToMove(2, 4));
+	//field.MakeMove(field.ToMove(3, 2));
+	//field.MakeMove(field.ToMove(3, 3));
+	//field.MakeMove(field.ToMove(2, 1));
+	//field.MakeMove(field.ToMove(0, 0));
+	//field.MakeMove(field.ToMove(3, 0));
+	//field.MakeMove(field.ToMove(0, 1));
+	//field.MakeMove(field.ToMove(4, 1));
+	//field.DebugPrint(cout, "", true, true);
+	//float input[6][5][5];
+	//FieldToNNInput(field, input);
+	//for (int i = 0; i < 6; i++)
+	//{
+	//	for (int j = 4; j >= 0; j--)
+	//	{
+	//		for (int k = 0; k < 5; k++)
+	//			cout << input[i][j][k] << " ";
+	//		cout << "\n";
+	//	}
+	//	cout << "\n";
+	//}
+	//return 0;
 	//field.MakeMove(field.ToMove(4, 10));
 	//field.MakeMove(field.ToMove(8, 8));
 	//field.score = 24;

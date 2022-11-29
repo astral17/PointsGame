@@ -92,8 +92,8 @@ float MctsRandomGame(Field& field, std::mt19937& gen, MoveList moves)
             putted++;
         }
 
-    //result = std::max(-1.f, std::min(1.f, field.GetScore(player) / 10.f));
-    result = std::max(-1, std::min(1, field.GetScore(player)));
+    result = std::max(-1.f, std::min(1.f, field.GetScore(player) / 10.f));
+    //result = std::max(-1, std::min(1, field.GetScore(player)));
 
     for (size_t i = 0; i < putted; i++)
         field.Undo();
@@ -189,14 +189,14 @@ float MctsSearch(Field& field, MctsNode* node, std::mt19937& gen, NNetwork* net 
     }
     MctsNode* best = nullptr;
     float best_score = std::numeric_limits<float>::max();
-    for (MctsNode** cur_child = &node->child; *cur_child; cur_child = &(*cur_child)->sibling)
+    for (MctsNode* cur_child = node->child; cur_child; cur_child = cur_child->sibling)
     {
         // Select best child (min value because value for enemy after move)
-        float score = (*cur_child)->GetQ() - (*cur_child)->GetU(node->visits);
+        float score = cur_child->GetQ() - cur_child->GetU(node->visits);
         if (score < best_score)
         {
             best_score = score;
-            best = *cur_child;
+            best = cur_child;
         }
     }
     // Go to best child
@@ -242,14 +242,14 @@ Move Mcts(Field& field, MctsNode& root, std::mt19937& gen, NNetwork* net, int si
         float x = dist(gen);
         float cur = 0;
         float sum = 0;
-        for (MctsNode** cur_child = &root.child; *cur_child; cur_child = &(*cur_child)->sibling)
-            sum += std::powf((*cur_child)->visits, t);
-        for (MctsNode** cur_child = &root.child; *cur_child; cur_child = &(*cur_child)->sibling)
+        for (MctsNode* cur_child = root.child; cur_child; cur_child = cur_child->sibling)
+            sum += std::powf(cur_child->visits, t);
+        for (MctsNode* cur_child = root.child; cur_child; cur_child = cur_child->sibling)
         {
-            cur += std::powf((*cur_child)->visits, t) / sum;
+            cur += std::powf(cur_child->visits, t) / sum;
             if (cur >= x)
             {
-                best = *cur_child;
+                best = cur_child;
                 break;
             }
         }

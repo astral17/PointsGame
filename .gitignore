@@ -364,3 +364,9 @@ FodyWeavers.xsd
 
 # Third Party libraries
 third_party/
+
+# Runtime only files
+*.nn
+*.bwf
+*.dll
+*.exe

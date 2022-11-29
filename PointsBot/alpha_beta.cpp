@@ -75,10 +75,12 @@ AlphaBetaResult AlphaBeta(Field& field, const MoveList& moves, int depth, int al
 	if (depth == 0)
 		return AlphaBetaResult(field.GetScore(field.GetPlayer()));
 	AlphaBetaResult bestMove(-INT_MAX);
+	bool moved = false;
 	for (Move move : moves)
 	{
 		if (field.CouldMove(move))
 		{
+			moved = true;
 			field.MakeMove(move);
 			AlphaBetaResult curMove(-AlphaBeta(field, moves, depth - 1, -beta, -alpha).score, move);
 			field.Undo();
@@ -89,6 +91,8 @@ AlphaBetaResult AlphaBeta(Field& field, const MoveList& moves, int depth, int al
 			alpha = std::max(alpha, curMove.score);
 		}
 	}
+	if (!moved)
+		return AlphaBetaResult(field.GetScore(field.GetPlayer()));
 	return bestMove;
 }
 
@@ -126,7 +130,9 @@ Move AlphaBeta(Field& field, std::mt19937 &gen, int depth)
 	}
 	for (Move move : tempBorder)
 		field.DelBorder(move);
-	std::cout << "alpha beta score: " << result.score << "\n";
+	//std::cout << "alpha beta score: " << result.score << "\n";
+	if (!field.CouldMove(result.move))
+		exit(123);
 	return result.move;
 	//return AlphaBeta(field, moves, depth).move;
 }

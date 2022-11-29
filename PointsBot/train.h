@@ -2,6 +2,7 @@
 #include "field.h"
 #include "layers.h"
 #include "uct.h"
+#include "alpha_beta.h"
 #include <typeinfo>
 #include <algorithm>
 #include <iostream>
@@ -88,46 +89,86 @@ struct NeuralStrategy : Strategy
     {
         NNetwork net(eng, kind);
 
-        constexpr int kBlocks = 2;
-        constexpr int kFilters = 32;
-        constexpr int kPolicyFilters = 16;
-        constexpr int kValueFilters = 16;
-        constexpr int kSeSize = 8;
-        constexpr int kReluAlpha = 0;
+        //std::vector<std::unique_ptr<Layer>> layers;
+        //layers.emplace_back(new InputLayer(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH }));
+        //layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH * 6));
+        //layers.emplace_back(new BatchNormLayer(*layers.back()));
+        //layers.emplace_back(new ReluLayer(*layers.back(), 0));
+        //Layer& last = *layers.back();
+        //layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
+        //Layer& policy_layer = *layers.back();
+        //layers.emplace_back(new DenseLayer(last, 3));
+        //if (kind == dnnl::prop_kind::forward_scoring)
+        //    layers.emplace_back(new SoftMaxLayer(*layers.back()));
+        //Layer& value_layer = *layers.back();
+
+        //CrossEntropyLoss loss_policy(net, true);
+        //CrossEntropyLoss loss_value(net, true);
+        //net.Build({ &policy_layer, &value_layer }, 0.01, { &loss_policy, &loss_value });
+
         std::vector<std::unique_ptr<Layer>> layers;
         layers.emplace_back(new InputLayer(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH }));
-        layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, 6, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH * 6));
         layers.emplace_back(new BatchNormLayer(*layers.back()));
-
-        for (int i = 0; i < kBlocks; i++)
-        {
-            Layer& residual = *layers.back();
-            layers.emplace_back(new ConvLayer(residual, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-            layers.emplace_back(new BatchNormLayer(*layers.back()));
-            layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-            layers.emplace_back(new BatchNormLayer(*layers.back()));
-            layers.emplace_back(new SELayer(*layers.back(), kSeSize));
-            layers.emplace_back(new LayerAdder(residual, *layers.back()));
-            layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
-        }
-        Layer& tower_last = *layers.back();
-        layers.emplace_back(new ConvLayer(tower_last, { kPolicyFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        layers.emplace_back(new ReluLayer(*layers.back(), 0));
+        layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH * 6));
         layers.emplace_back(new BatchNormLayer(*layers.back()));
-        layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
+        layers.emplace_back(new ReluLayer(*layers.back(), 0));
+        layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH * 6));
+        layers.emplace_back(new BatchNormLayer(*layers.back()));
+        layers.emplace_back(new ReluLayer(*layers.back(), 0));
+        Layer& last = *layers.back();
         layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
         Layer& policy_layer = *layers.back();
-
-        layers.emplace_back(new ConvLayer(tower_last, { kValueFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
-        layers.emplace_back(new BatchNormLayer(*layers.back()));
-        layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
-        layers.emplace_back(new DenseLayer(*layers.back(), 3)); // win, draw, lose
+        layers.emplace_back(new DenseLayer(last, 3));
         if (kind == dnnl::prop_kind::forward_scoring)
             layers.emplace_back(new SoftMaxLayer(*layers.back()));
         Layer& value_layer = *layers.back();
 
         CrossEntropyLoss loss_policy(net, true);
         CrossEntropyLoss loss_value(net, true);
-        net.Build({ &policy_layer, &value_layer }, 0.01, { &loss_policy, &loss_value });
+        net.Build({ &policy_layer, &value_layer }, 0.001, { &loss_policy, &loss_value });
+
+        //constexpr int kBlocks = 8;
+        //constexpr int kFilters = 64;
+        //constexpr int kPolicyFilters = 16;
+        //constexpr int kValueFilters = 16;
+        //constexpr int kSeSize = 8;
+        //constexpr int kReluAlpha = 0;
+        //std::vector<std::unique_ptr<Layer>> layers;
+        //layers.emplace_back(new InputLayer(net, { batch, 6, FIELD_HEIGHT, FIELD_WIDTH }));
+        //layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, 6, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        //layers.emplace_back(new BatchNormLayer(*layers.back()));
+
+        //for (int i = 0; i < kBlocks; i++)
+        //{
+        //    Layer& residual = *layers.back();
+        //    layers.emplace_back(new ConvLayer(residual, { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        //    layers.emplace_back(new BatchNormLayer(*layers.back()));
+        //    layers.emplace_back(new ConvLayer(*layers.back(), { kFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        //    layers.emplace_back(new BatchNormLayer(*layers.back()));
+        //    layers.emplace_back(new SELayer(*layers.back(), kSeSize));
+        //    layers.emplace_back(new LayerAdder(residual, *layers.back()));
+        //    layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
+        //}
+        //Layer& tower_last = *layers.back();
+        //layers.emplace_back(new ConvLayer(tower_last, { kPolicyFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        //layers.emplace_back(new BatchNormLayer(*layers.back()));
+        //layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
+        //layers.emplace_back(new DenseLayer(*layers.back(), FIELD_HEIGHT * FIELD_WIDTH));
+        //Layer& policy_layer = *layers.back();
+
+        //layers.emplace_back(new ConvLayer(tower_last, { kValueFilters, kFilters, 3, 3 }, { 1, 1 }, { 1, 1 }, { 1, 1 }));
+        //layers.emplace_back(new BatchNormLayer(*layers.back()));
+        //layers.emplace_back(new ReluLayer(*layers.back(), kReluAlpha));
+        //layers.emplace_back(new DenseLayer(*layers.back(), 3)); // win, draw, lose
+        //if (kind == dnnl::prop_kind::forward_scoring)
+        //    layers.emplace_back(new SoftMaxLayer(*layers.back()));
+        //Layer& value_layer = *layers.back();
+
+        //CrossEntropyLoss loss_policy(net, true);
+        //CrossEntropyLoss loss_value(net, true);
+        //net.Build({ &policy_layer, &value_layer }, 0.01, { &loss_policy, &loss_value });
         return net;
     }
     NeuralStrategy(int strength = 100, dnnl::engine::kind eng_kind = dnnl::engine::kind::cpu)
@@ -235,6 +276,21 @@ struct MctsStrategy : Strategy
             storage->push({ i_v, p_v, node.value });
         }
         field.MakeMove(move);
+    }
+};
+
+struct AlphaBetaStrategy : Strategy
+{
+    std::mt19937 gen;
+    int strength;
+    AlphaBetaStrategy(int strength) : strength(strength) {}
+    virtual void Randomize(int seed) override
+    {
+        gen = std::mt19937(seed);
+    }
+    virtual void MakeMove(Field& field, MoveStorage* storage = nullptr, bool train = false) override
+    {
+        field.MakeMove(AlphaBeta(field, gen, strength));
     }
 };
 
