@@ -135,7 +135,7 @@ private:
 	// —охранить клетку дл€ возможности отката ходов
 	inline void AddToBackup(Move move)
 	{
-		changes.emplace_back(move, field[move] & ~kVisitedBit);
+		changes.emplace_back(move, field[move]);
 	}
 	// «афиксировать изменени€, т.е. контрольна€ точка дл€ отката хода
 	inline void CommitChanges()
@@ -143,6 +143,7 @@ private:
 		history.push_back(changes.size());
 		scores.push_back(score);
 	}
+	inline void UnTagQueue();
 	//bool TryCapture(Move start, MoveList &visited);
 	bool TryCapture(Move start);
 	void CaptureEmpty(Move start);

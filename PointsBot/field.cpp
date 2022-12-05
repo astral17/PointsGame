@@ -20,18 +20,14 @@ void Field::MakeMove(Move move)
 		//TryCapture(Left(move), visited);
 		//TryCapture(Right(move), visited);
 		// TODO: сделать очистку внутри TryCapture
-		TryCapture(Up(move));
-		for (int i = 0; i < q.r; i++)
-			field[q[i]] &= ~kVisitedBit;
-		TryCapture(Down(move));
-		for (int i = 0; i < q.r; i++)
-			field[q[i]] &= ~kVisitedBit;
-		TryCapture(Left(move));
-		for (int i = 0; i < q.r; i++)
-			field[q[i]] &= ~kVisitedBit;
-		TryCapture(Right(move));
-		for (int i = 0; i < q.r; i++)
-			field[q[i]] &= ~kVisitedBit;
+		if ((Left(Up(move)) & kPointBit) + (Left(move) & kPointBit))
+			TryCapture(Up(move));
+		if ((Right(move) & kPointBit) + (Right(Down(move)) & kPointBit))
+			TryCapture(Down(move));
+		if ((Down(Left(move)) & kPointBit) + (Down(move) & kPointBit))
+			TryCapture(Left(move));
+		if ((Up(move) & kPointBit) + (Up(Right(move)) & kPointBit))
+			TryCapture(Right(move));
 	}
 	player = NextPlayer(player);
 	// ’од сейчас в пустой вражеской зоне?, ѕолучи и захватись
@@ -94,6 +90,12 @@ int Field::GetScore(Player player) const
 	return player == 0 ? score : -score;
 }
 
+inline void Field::UnTagQueue()
+{
+	for (int i = 0; i < q.r; i++)
+		field[q[i]] &= ~kVisitedBit;
+}
+
 bool Field::TryCapture(Move start)
 {
 	// TODO: A*
@@ -116,7 +118,7 @@ bool Field::TryCapture(Move start)
 		// ≈сли сосед граница (возможно искусственно установленна€ эвристикой дл€ быстрого выхода), то окружить нельз€
 		// ¬ посещЄнные клетки ходить нет смысла, а также мы не можем проходить сквозь свои клетки
 		if (IsBorder(Up(move)))
-			return false;
+			return UnTagQueue(), false;
 		if (!IsVisited(Up(move)) && !IsOwner(Up(move), player))
 		{
 			// “.к. это гарантированно не наша клетка, то раз это точка, то захватываем
@@ -126,7 +128,7 @@ bool Field::TryCapture(Move start)
 			q.push(Up(move));
 		}
 		if (IsBorder(Down(move)))
-			return false;
+			return UnTagQueue(), false;
 		if (!IsVisited(Down(move)) && !IsOwner(Down(move), player))
 		{
 			if (IsPoint(Down(move)))
@@ -135,7 +137,7 @@ bool Field::TryCapture(Move start)
 			q.push(Down(move));
 		}
 		if (IsBorder(Left(move)))
-			return false;
+			return UnTagQueue(), false;
 		if (!IsVisited(Left(move)) && !IsOwner(Left(move), player))
 		{
 			if (IsPoint(Left(move)))
@@ -144,7 +146,7 @@ bool Field::TryCapture(Move start)
 			q.push(Left(move));
 		}
 		if (IsBorder(Right(move)))
-			return false;
+			return UnTagQueue(), false;
 		if (!IsVisited(Right(move)) && !IsOwner(Right(move), player))
 		{
 			if (IsPoint(Right(move)))
@@ -156,6 +158,7 @@ bool Field::TryCapture(Move start)
 	Cell addFlag = captured ? kBaseBit : kEmptyBaseBit;
 	for (int i = 0; i < q.r; i++)
 	{
+		field[q[i]] &= ~kVisitedBit;
 		AddToBackup(q[i]);
 		SetOwner(q[i], player);
 		ApplyFlag(q[i], addFlag);
