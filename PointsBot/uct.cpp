@@ -158,7 +158,7 @@ short PlaySimulation(Field& field, mt19937& gen, const MoveList& possible_moves,
 }
 
 template<typename _Cont>
-MoveList GeneratePossibleMoves(const Field& field, _Cont& moves)
+MoveList GeneratePossibleMoves(Field& field, _Cont& moves)
 {
 	// TODO BUG: пустая далёкая зона в центре является выходом, что не есть правда
 	MoveList tempBorder;
@@ -222,6 +222,7 @@ MoveList GeneratePossibleMoves(const Field& field, _Cont& moves)
 	if (moves.empty())
 		moves.push_back(field.ToMove(field.width / 2, field.height / 2));
 	delete[] r_field;
+	//field.astar.BuildDistance();
 	return tempBorder;
 }
 

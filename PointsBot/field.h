@@ -16,18 +16,15 @@ using MoveList = std::vector<Move>;
 constexpr Player kPlayerRed = 0;
 constexpr Player kPlayerBlack = 1;
 
+class Field;
+
+#include "astar.h"
+
 class Field
 {
 public:
-	Field(short height, short width, Player player = kPlayerRed) : field(new Cell[(width + 2) * (height + 2)]), q((width + 2) * (height + 2)), width(width), height(height), player(player)
-	{
-		for (int i = 0; i < Length(); i++)
-			field[i] = 0;
-		for (int i = -1; i <= height; i++)
-			field[ToMove(-1, i)] = field[ToMove(width, i)] = kBorderBit;
-		for (int i = -1; i <= width; i++)
-			field[ToMove(i, -1)] = field[ToMove(i, height)] = kBorderBit;
-	}
+	Field(short height, short width, Player player = kPlayerRed);
+	
 	//Field(const Field& other) : Field(other.height, other.width, other.player)
 	//{
 	//	for (int i = 0; i < Length(); i++)
@@ -35,11 +32,7 @@ public:
 	//	scores.back() = score = other.score;
 	//}
 
-	Field(const Field& other) : q((other.width + 2)* (other.height + 2)), field(new Cell[(other.width + 2) * (other.height + 2)]), width(other.width), height(other.height), score(other.score), player(other.player)
-	{
-		std::copy_n(other.field.get(), (width + 2) * (height + 2), field.get());
-		scores.back() = score;
-	}
+	Field(const Field& other);
 
 	inline bool CouldMove(Move move) const { return !(field[move] & kCouldMove); }
 	inline bool IsPoint(Move move) const { return field[move] & kPointBit; }
@@ -129,6 +122,7 @@ public:
 			out << "\n";
 		}
 	}
+	friend class AStar;
 private:
 	inline void ApplyFlag(Move move, Cell flag) { field[move] |= flag; }
 	inline void SetOwner(Move move, Player owner) { field[move] = (field[move] & ~kPlayerBit) | owner; }
@@ -175,4 +169,5 @@ public:
 	int score = 0;
 	const short width, height;
 	Player player;
+	AStar astar;
 };

@@ -1,6 +1,7 @@
+#define NOMINMAX
+#include <Windows.h>
 #include "train.h"
 #include "mcts.h"
-#include <Windows.h>
 
 void RightRotateTo(const MoveRecord& src, MoveRecord& dst)
 {

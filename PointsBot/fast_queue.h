@@ -16,6 +16,8 @@ public:
 	inline void clear() { l = r = 0; }
 	inline bool empty() const { return l == r; }
 	inline void push(const T x) { q[r++] = x; }
+	template<class... Args>
+	inline void emplace(Args&&... args) { q[r++] = T(args...); }
 	inline T front() const { return q[l]; }
 	inline void pop() { l++; }
 public:

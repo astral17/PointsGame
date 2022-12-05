@@ -1,5 +1,21 @@
 #include "field.h"
 
+Field::Field(short height, short width, Player player) : field(new Cell[(width + 2) * (height + 2)]), q((width + 2)* (height + 2)), width(width), height(height), player(player), astar(*this)
+{
+	for (int i = 0; i < Length(); i++)
+		field[i] = 0;
+	for (int i = -1; i <= height; i++)
+		field[ToMove(-1, i)] = field[ToMove(width, i)] = kBorderBit;
+	for (int i = -1; i <= width; i++)
+		field[ToMove(i, -1)] = field[ToMove(i, height)] = kBorderBit;
+}
+
+Field::Field(const Field& other) : q((other.width + 2)* (other.height + 2)), field(new Cell[(other.width + 2) * (other.height + 2)]), width(other.width), height(other.height), score(other.score), player(other.player), astar(*this)
+{
+	std::copy_n(other.field.get(), (width + 2) * (height + 2), field.get());
+	scores.back() = score;
+}
+
 void Field::MakeMove(Move move)
 {
 	AddToBackup(move);
@@ -15,11 +31,6 @@ void Field::MakeMove(Move move)
 	int rcnt = (Right(Up(move)) & kPointBit) + (Right(move) & kPointBit) + (Right(Down(move)) & kPointBit);
 	if (ucnt && dcnt || lcnt && rcnt)
 	{
-		//TryCapture(Up(move), visited);
-		//TryCapture(Down(move), visited);
-		//TryCapture(Left(move), visited);
-		//TryCapture(Right(move), visited);
-		// TODO: сделать очистку внутри TryCapture
 		if ((Left(Up(move)) & kPointBit) + (Left(move) & kPointBit))
 			TryCapture(Up(move));
 		if ((Right(move) & kPointBit) + (Right(Down(move)) & kPointBit))
@@ -98,63 +109,18 @@ inline void Field::UnTagQueue()
 
 bool Field::TryCapture(Move start)
 {
-	// TODO: A*
 	if (IsBorder(start) || IsOwner(start, player))
 		return false;
-	//std::queue<Move> q;
 	q.clear();
-	q.push(start);
-	int captured = 0;
-	int cnt = 0;
-
-	if (IsPoint(start) && IsOwner(start, NextPlayer(player)))
-		captured++;
-	field[start] |= kVisitedBit;
-
-	while (!q.empty())
+	if (astar.HaveExit(start))
 	{
-		Move move = q.front();
-		q.pop();
-		// ≈сли сосед граница (возможно искусственно установленна€ эвристикой дл€ быстрого выхода), то окружить нельз€
-		// ¬ посещЄнные клетки ходить нет смысла, а также мы не можем проходить сквозь свои клетки
-		if (IsBorder(Up(move)))
-			return UnTagQueue(), false;
-		if (!IsVisited(Up(move)) && !IsOwner(Up(move), player))
-		{
-			// “.к. это гарантированно не наша клетка, то раз это точка, то захватываем
-			if (IsPoint(Up(move)))
-				captured++;
-			field[Up(move)] |= kVisitedBit;
-			q.push(Up(move));
-		}
-		if (IsBorder(Down(move)))
-			return UnTagQueue(), false;
-		if (!IsVisited(Down(move)) && !IsOwner(Down(move), player))
-		{
-			if (IsPoint(Down(move)))
-				captured++;
-			field[Down(move)] |= kVisitedBit;
-			q.push(Down(move));
-		}
-		if (IsBorder(Left(move)))
-			return UnTagQueue(), false;
-		if (!IsVisited(Left(move)) && !IsOwner(Left(move), player))
-		{
-			if (IsPoint(Left(move)))
-				captured++;
-			field[Left(move)] |= kVisitedBit;
-			q.push(Left(move));
-		}
-		if (IsBorder(Right(move)))
-			return UnTagQueue(), false;
-		if (!IsVisited(Right(move)) && !IsOwner(Right(move), player))
-		{
-			if (IsPoint(Right(move)))
-				captured++;
-			field[Right(move)] |= kVisitedBit;
-			q.push(Right(move));
-		}
+		for (int i = 0; i < q.r; i++)
+			field[q[i]] &= ~kVisitedBit;
+		return false;
 	}
+	int captured = 0;
+	for (int i = 0; i < q.r; i++)
+		captured += IsPoint(q[i]);
 	Cell addFlag = captured ? kBaseBit : kEmptyBaseBit;
 	for (int i = 0; i < q.r; i++)
 	{

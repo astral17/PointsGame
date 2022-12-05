@@ -7,7 +7,7 @@ class FastStack
 {
 public:
 	FastStack(IndexType capacity) : stk(new T[capacity]), capacity(capacity), size(0) {}
-	FastStack(const FastStack& other) : q(new T[other.capacity]), capacity(other.capacity), size(other.size)
+	FastStack(const FastStack<T, IndexType>& other) : stk(new T[other.capacity]), capacity(other.capacity), size(other.size)
 	{
 		std::copy_n(other.stk.get(), other.size, stk.get());
 	}
@@ -16,6 +16,8 @@ public:
 	inline void clear() { size = 0; }
 	inline bool empty() const { return !size; }
 	inline void push(const T x) { stk[size++] = x; }
+	template<class... Args>
+	inline void emplace(Args&&... args) { stk[size++] = T(args...); }
 	inline T top() const { return stk[size - 1]; }
 	inline void pop() { --size; }
 	inline void swap(FastStack& other)
