@@ -4,16 +4,26 @@
 AStar::AStar(Field& field)
 	: cur_stk((field.width + 2) * (field.height + 2)),
 	next_stk((field.width + 2) * (field.height + 2)),
+#ifdef ASTAR_EXTENDED_FEATURE
 	distRed(new short[(field.width + 2) * (field.height + 2)]),
 	distBlack(new short[(field.width + 2) * (field.height + 2)]),
+#else
+    dist(new short[(field.width + 2) * (field.height + 2)]),
+#endif
 	field(field)
 {
     for (Move i = field.MinMove(); i <= field.MaxMove(); i++)
-        distRed[i] = distBlack[i] = std::min(std::min<short>(field.ToX(i), field.width - field.ToX(i)), std::min<short>(field.ToY(i), field.width - field.ToY(i)));
+#ifdef ASTAR_EXTENDED_FEATURE
+        distRed[i] = distBlack[i]
+#else
+    dist[i]
+#endif
+            = std::min(std::min<short>(field.ToX(i), field.width - field.ToX(i)), std::min<short>(field.ToY(i), field.width - field.ToY(i)));
 }
 
 void AStar::BuildDistance()
 {
+#ifdef ASTAR_EXTENDED_FEATURE
     struct BfsState
     {
         Move move;
@@ -73,11 +83,14 @@ void AStar::BuildDistance()
         for (int i = 0; i < q.r; i++)
             field.field[q[i].move] &= ~Field::Masks::kVisitedBit;
     }
+#endif
 }
 
 bool AStar::HaveExit(Move move)
 {
+#ifdef ASTAR_EXTENDED_FEATURE
     auto dist = field.player == kPlayerRed ? distRed.get() : distBlack.get();
+#endif
     cur_stk.clear();
     next_stk.clear();
     cur_stk.push(move);
