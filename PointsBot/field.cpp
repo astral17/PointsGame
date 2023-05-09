@@ -25,19 +25,19 @@ void Field::MakeMove(Move move)
 	ApplyFlag(move, kPointBit | (player << kColorShift));
 	// Произошёл ли захват?, Если да, то обновить поле
 	//MoveList visited;
-	int ucnt = (Up(Left(move)) & kPointBit) + (Up(move) & kPointBit) + (Up(Right(move)) & kPointBit);
-	int dcnt = (Down(Left(move)) & kPointBit) + (Down(move) & kPointBit) + (Down(Right(move)) & kPointBit);
-	int lcnt = (Left(Up(move)) & kPointBit) + (Left(move) & kPointBit) + (Left(Down(move)) & kPointBit);
-	int rcnt = (Right(Up(move)) & kPointBit) + (Right(move) & kPointBit) + (Right(Down(move)) & kPointBit);
+	int ucnt = (field[Up(Left(move))] & kPointBit) + (field[Up(move)] & kPointBit) + (field[Up(Right(move))] & kPointBit);
+	int dcnt = (field[Down(Left(move))] & kPointBit) + (field[Down(move)] & kPointBit) + (field[Down(Right(move))] & kPointBit);
+	int lcnt = (field[Left(Up(move))] & kPointBit) + (field[Left(move)] & kPointBit) + (field[Left(Down(move))] & kPointBit);
+	int rcnt = (field[Right(Up(move))] & kPointBit) + (field[Right(move)] & kPointBit) + (field[Right(Down(move))] & kPointBit);
 	if (ucnt && dcnt || lcnt && rcnt)
 	{
-		if ((Left(Up(move)) & kPointBit) + (Left(move) & kPointBit))
+		if ((field[Left(Up(move))] & kPointBit) + (field[Left(move)] & kPointBit))
 			TryCapture(Up(move));
-		if ((Right(move) & kPointBit) + (Right(Down(move)) & kPointBit))
+		if ((field[Right(move)] & kPointBit) + (field[Right(Down(move))] & kPointBit))
 			TryCapture(Down(move));
-		if ((Down(Left(move)) & kPointBit) + (Down(move) & kPointBit))
+		if ((field[Down(Left(move))] & kPointBit) + (field[Down(move)] & kPointBit))
 			TryCapture(Left(move));
-		if ((Up(move) & kPointBit) + (Up(Right(move)) & kPointBit))
+		if ((field[Up(move)] & kPointBit) + (field[Up(Right(move))] & kPointBit))
 			TryCapture(Right(move));
 	}
 	player = NextPlayer(player);

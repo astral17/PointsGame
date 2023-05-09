@@ -88,6 +88,8 @@ public:
 	Move MinMove() const { return ToMove(0, 0); }
 	inline Move MaxMove() const { return ToMove(width - 1, height - 1); }
 
+	bool IsValid(int x, int y) const { return 0 <= x && x < width && 0 <= y && y < height; }
+
 	inline static short ToX(Move move, short width) { return move % (width + 2) - 1; }
 	inline static short ToY(Move move, short width) { return move / (width + 2) - 1; }
 	inline short ToX(Move move) const { return ToX(move, width); }
