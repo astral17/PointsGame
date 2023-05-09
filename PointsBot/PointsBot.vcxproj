@@ -193,6 +193,7 @@
     <ClCompile Include="bns.cpp" />
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="field.cpp" />
+    <ClCompile Include="heuristics.cpp" />
     <ClCompile Include="layers.cpp" />
     <ClCompile Include="train.cpp" />
     <ClCompile Include="uct.cpp" />
@@ -205,6 +206,7 @@
     <ClInclude Include="fast_queue.h" />
     <ClInclude Include="fast_stack.h" />
     <ClInclude Include="field.h" />
+    <ClInclude Include="heuristics.h" />
     <ClInclude Include="layers.h" />
     <ClInclude Include="mcts.h" />
     <ClInclude Include="train.h" />

@@ -1,6 +1,8 @@
 ﻿// BotTest.cpp : Этот файл содержит функцию "main". Здесь начинается и заканчивается выполнение программы.
 //
+#ifdef _DEBUG
 #define _GLIBCXX_DEBUG
+#endif
 #define NOMINMAX
 #include <Windows.h>
 #include <algorithm>
@@ -15,6 +17,8 @@
 #include "layers.cpp"
 #include "train.cpp"
 #include "mcts.h"
+#include "heuristics.h"
+#include "heuristics.cpp"
 
 using namespace std;
 
@@ -32,11 +36,18 @@ short SetField[] =
 //0, 0, 0, 3, 3, 2, 2, 0, 0, 0,
 //0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 
+
 //0, 0, 0, 0, 0,
 //0, 0, 0, 0, 0,
 //0, 2, 3, 2, 0,
 //0, 0, 2, 0, 0,
 //0, 0, 0, 0, 0,
+
+0, 0, 0, 0, 0,
+0, 0, 2, 0, 0,
+0, 3, 0, 3, 0,
+0, 0, 2, 0, 0,
+0, 0, 0, 0, 0,
 
  //0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
  //0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -122,26 +133,26 @@ short SetField[] =
  //2, 3, 3, 3, 3, 2, 0, 3, 3, 7, 3, 7, 3, 0, 2, 3, 9, 3, 0, 0,
  //2, 2, 2, 2, 2, 2, 0, 0, 0, 3, 0, 3, 0, 0, 2, 0, 3, 2, 0, 0,
 
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 3, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 3, 2, 2, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 3, 0, 0, 2, 3, 3, 0, 0, 0, 3, 2, 3, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 2, 3, 7, 3, 0, 0, 0, 0, 2, 2, 0, 0, 0,
- 0, 0, 0, 0, 3, 3, 2, 2, 3, 3, 0, 2, 2, 0, 0, 0, 3, 2, 0, 0,
- 0, 0, 3, 2, 2, 2, 6, 6, 2, 3, 3, 3, 3, 0, 0, 3, 0, 2, 0, 0,
- 0, 0, 0, 3, 2, 2, 4, 2, 2, 2, 3, 0, 2, 0, 3, 0, 0, 3, 2, 0,
- 0, 0, 3, 2, 6, 2, 2, 2, 3, 2, 3, 3, 2, 0, 3, 0, 0, 3, 2, 0,
- 0, 0, 3, 0, 2, 3, 3, 3, 3, 3, 7, 7, 3, 3, 3, 0, 0, 2, 6, 2,
- 0, 0, 0, 0, 2, 0, 3, 0, 0, 3, 7, 7, 7, 7, 3, 0, 0, 3, 2, 0,
- 0, 0, 0, 0, 3, 2, 3, 0, 3, 9, 3, 7, 7, 7, 7, 3, 0, 0, 2, 0,
- 0, 0, 0, 0, 0, 2, 3, 0, 0, 3, 2, 3, 7, 7, 7, 3, 0, 2, 0, 0,
- 0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 3, 7, 3, 0, 0, 2, 3, 0,
- 0, 0, 0, 0, 0, 3, 0, 2, 6, 2, 3, 3, 0, 3, 0, 0, 2, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 3, 0, 2, 3, 2, 2, 2, 0, 0, 2, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 2, 0, 3, 3, 3, 2, 2, 2, 0, 0, 0, 0, 0,
- 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 3, 0, 3, 0, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 0, 0, 3, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 0, 3, 2, 2, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0,
+ //0, 0, 0, 0, 3, 0, 0, 2, 3, 3, 0, 0, 0, 3, 2, 3, 0, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 0, 2, 3, 7, 3, 0, 0, 0, 0, 2, 2, 0, 0, 0,
+ //0, 0, 0, 0, 3, 3, 2, 2, 3, 3, 0, 2, 2, 0, 0, 0, 3, 2, 0, 0,
+ //0, 0, 3, 2, 2, 2, 6, 6, 2, 3, 3, 3, 3, 0, 0, 3, 0, 2, 0, 0,
+ //0, 0, 0, 3, 2, 2, 4, 2, 2, 2, 3, 0, 2, 0, 3, 0, 0, 3, 2, 0,
+ //0, 0, 3, 2, 6, 2, 2, 2, 3, 2, 3, 3, 2, 0, 3, 0, 0, 3, 2, 0,
+ //0, 0, 3, 0, 2, 3, 3, 3, 3, 3, 7, 7, 3, 3, 3, 0, 0, 2, 6, 2,
+ //0, 0, 0, 0, 2, 0, 3, 0, 0, 3, 7, 7, 7, 7, 3, 0, 0, 3, 2, 0,
+ //0, 0, 0, 0, 3, 2, 3, 0, 3, 9, 3, 7, 7, 7, 7, 3, 0, 0, 2, 0,
+ //0, 0, 0, 0, 0, 2, 3, 0, 0, 3, 2, 3, 7, 7, 7, 3, 0, 2, 0, 0,
+ //0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 3, 7, 3, 0, 0, 2, 3, 0,
+ //0, 0, 0, 0, 0, 3, 0, 2, 6, 2, 3, 3, 0, 3, 0, 0, 2, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 3, 0, 2, 3, 2, 2, 2, 0, 0, 2, 0, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 0, 2, 0, 3, 3, 3, 2, 2, 2, 0, 0, 0, 0, 0,
+ //0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 3, 0, 3, 0, 0, 0, 0,
 
 	//0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	//0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -185,6 +196,62 @@ short SetField[] =
 //0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 };
 
+class HTimer
+{
+	LARGE_INTEGER frequency, start, end;
+public:
+	HTimer()
+	{
+		if (::QueryPerformanceFrequency(&frequency) == FALSE)
+			throw "foo";
+	}
+	void Start()
+	{
+		::QueryPerformanceCounter(&start);
+
+	}
+	double Stop()
+	{
+		::QueryPerformanceCounter(&end);
+		return static_cast<double>(end.QuadPart - start.QuadPart) / frequency.QuadPart;
+	}
+};
+
+double Battle(function<Move(Field&)> bot1, function<Move(Field&)> bot2, mt19937 &gen, int height = 10, int width = 10, bool log_field = false)
+{
+	double time1 = 0, time2 = 0;
+	HTimer timer;
+	bool swapped = gen() & 1;
+	if (swapped)
+		std::swap(bot1, bot2);
+	Field field(height, width);
+
+	Move move;
+	while (!field.GetAllMoves().empty())
+	{
+		timer.Start();
+		move = bot1(field);
+		(field.GetPlayer() == 0 ? time1 : time2) += timer.Stop();
+		// TODO: Fix bug
+		if (move == (Move)-1 || !field.CouldMove(move))
+			throw;
+		field.MakeMove(move);
+		std::swap(bot1, bot2);
+	}
+	if (log_field)
+		field.DebugPrint(cout, to_string(field.score), true, true);
+	if (swapped)
+		std::swap(time1, time2);
+	std::cout << "time: " << time1 << " vs " << time2 << "\n";
+	//return field.GetScore(swapped);
+	int score = field.GetScore(swapped);
+	if (score > 0)
+	    return 1;
+	if (score < 0)
+	    return 0;
+	return 0.5;
+}
+
 int main()
 {
 	//auto stime = clock();
@@ -219,13 +286,14 @@ int main()
 	//field.MakeMove(field.ToMove(2, 1));
 	//field.MakeMove(field.ToMove(2, 2));
 	//field.MakeMove(field.ToMove(0, 1));
-	Field field(20, 20);
+	//Field field(20, 20);
 	//Field field(20, 20);
 	//Field field(11, 10, 1);
+	Field field(5, 5, 1);
 	//Field field(20, 20, 1);
 	for (int i = 0; i < field.height; i++)
 		for (int j = 0; j < field.width; j++)
-			field.field[field.ToMove(j, field.height - 1 - i)] = SetField[i * field.width + j];
+			field.field[field.ToMove(j, field.height - 1 - i)] = SetField[i * field.width + j] | ((SetField[i * field.width + j] & 1) * 64);
 	//field.MakeMove(field.ToMove(2, 2));
 	//field.MakeMove(field.ToMove(2, 3));
 	//field.MakeMove(field.ToMove(1, 3));
@@ -278,15 +346,16 @@ int main()
 	//field.MakeMove(field.ToMove(12, 9));
 	//field.MakeMove(field.ToMove(11, 11));
 	//field.MakeMove(field.ToMove(11, 10));
-	mt19937 mt;
+	mt19937 mt(time(0));
 	//for (int i = 0; i < 100; i++)
 	//cout << Uct(field, mt, 100000) << "\n";
 	//return 0;
 	//cout << Uct(field, mt, 450000) << "\n";
 	//cout << AlphaBeta(field, 3);
 	//cout << Uct(field, mt, 10000) << "\n";
+	//Move move = AlphaBeta(field, mt, 6);
 	//*
-	Move move = Uct(field, mt, 1000000); // Used time: 34.0991//*/
+	//Move move = Uct(field, mt, 1000000); // Used time: 34.0991//*/
 	/*
 	field.MakeMove(field.ToMove(10, 10));
 	field.MakeMove(field.ToMove(10, 9));
@@ -300,9 +369,18 @@ int main()
 	//Move move = AlphaBeta(field, mt, 6);
 	//field.MakeMove(394);
 	//Move move = BestNodeSearch(field, mt, 6);
-	cout << move << "\n";
-	field.MakeMove(move);
-	field.DebugPrint(cout, to_string(field.score), true, true);
+	//cout << move << "\n";
+	//field.MakeMove(field.ToMove(3, 4));
+	//field.MakeMove(Uct(field, mt, 10000));
+	HeuristicStrategy hs;
+	//Move move = hs.MakeMove(field, mt);
+	//std::cout << move << " " << field.ToX(move) << " " << field.ToY(move) << "\n";
+	//field.MakeMove(move);
+	//field.MakeMove(hs.MakeMove(field, mt));
+	//field.MakeMove(AlphaBeta(field, mt, 6));
+	//field.MakeMove(BestNodeSearch(field, mt, 6));
+	//field.DebugPrint(std::cout, to_string(field.score), true, true);
+	//return 0;
 	//for (int i = 0; i < 6; i++)
 	//{
 	//	Move move = AlphaBeta(field, mt, 6 - i / 2);
@@ -325,33 +403,86 @@ int main()
 	//}
 	//int score = 0;
 	//field.DebugPrint(cout, to_string(field.score), true, true);
+	double total_score = 0;
+	int total_games = 1e6;
+	for (int i = 0; i < total_games; i++)
+	{
+		double score = Battle(
+			[&](Field& field)
+			{
+				//auto moves = field.GetAllMoves();
+				//std::uniform_int_distribution<> d(0, moves.size() - 1);
+				//return moves[d(mt)];
+				//return hs.MakeMove(field, mt);
+				//return AlphaBeta(field, mt, 5);
+				//return field.GetAllMoves()[0];
+				return Uct(field, mt, 1000);
+			},
+			[&](Field& field)
+			{
+				//auto moves = field.GetAllMoves();
+				//std::uniform_int_distribution<> d(0, moves.size() - 1);
+				//return moves[d(mt)];
+				return hs.MakeMove(field, mt);
+
+				//field.DebugPrint(std::cout, to_string(field.score), true, true);
+				//int x, y;
+				//while (true)
+				//{
+				//	std::cout << "Your move: ";
+				//	cin >> x >> y;
+				//	if (x != -1)
+				//		break;
+				//	x = y;
+				//	cin >> y;
+				//	std::cout << field.ToMove(x, y) << "\n";
+				//}
+				//return field.ToMove(x, y);
+
+				//return Uct(field, mt, 200);
+			}, mt, 10, 10
+		);
+		//std::cout << i << ": " << score << "\n";
+		total_score += score;
+		//if (i % 100 == 99)
+		{
+			std::cout << "after " << i + 1 << ": " << total_score / (double)(i + 1) << "\n";
+		}
+	}
+	std::cout << "total: " << total_score / (double)total_games << "\n";
 	/*
+	HeuristicStrategy hs;
 	while (!field.GetAllMoves().empty())
 	{
-		if (field.player == 1)
+		if (field.player == 0)
 		{
-			field.MakeMove(Uct(field, mt, 1000000));
-			//field.MakeMove(AlphaBeta(field, mt, 12));
+			//field.MakeMove(Uct(field, mt, 1000000));
+			//field.MakeMove(Uct(field, mt, 1));
+			//field.MakeMove(AlphaBeta(field, mt, 6));
+			auto moves = field.GetAllMoves();
+			std::uniform_int_distribution<> d(0, moves.size() - 1);
+			field.MakeMove(moves[d(mt)]);
 		}
 		else
 		{
-			//field.MakeMove(Uct(field, mt, 100000));
+			field.MakeMove(hs.MakeMove(field, mt));
+			//field.MakeMove(Uct(field, mt, 10000));
 			//field.MakeMove(AlphaBeta(field, mt, 4));
 		//}
 		//Uct(&field, &mt, 2000000);
-		field.DebugPrint(cout, to_string(field.score), true, true);
-			int x, y;
-			while (true)
-			{
-				cout << "Your move: ";
-				cin >> x >> y;
-				if (x != -1)
-					break;
-				x = y;
-				cin >> y;
-				cout << field.ToMove(x, y) << "\n";
-			}
-			field.MakeMove(field.ToMove(x, y));
+			//field.DebugPrint(std::cout, to_string(field.score), true, true);
+			//int x, y;
+			//while (true)
+			//{
+			//	std::cout << "Your move: ";
+			//	cin >> x >> y;
+			//	if (x != -1)
+			//		break;
+			//	x = y;
+			//	cin >> y;
+			//	std::cout << field.ToMove(x, y) << "\n";
+			//}
+			//field.MakeMove(field.ToMove(x, y));
 		}
 		//else
 		//{
@@ -370,5 +501,5 @@ int main()
 	LARGE_INTEGER end;
 	QueryPerformanceCounter(&end);
 	double interval = static_cast<double>(end.QuadPart - stime.QuadPart) / frequency.QuadPart;
-	cout << "Used time: " << interval << "\n";
+	std::cout << "Used time: " << interval << "\n";
 }
